@@ -8,6 +8,7 @@
 #define	FS_MISC_H
 
 #include "fat32.h"
+#include "pipe.h"
 
 /**
  * @struct dev_drv_map fs.h "include/sys/fs.h"
@@ -84,6 +85,8 @@ struct inode {
 	int	i_dev;
 	int	i_cnt;		/**< How many procs share this inode  */
 	int	i_num;		/**< inode nr.  */
+
+    struct pipe_inode_info	*i_pipe; // added by xuxinping 2023-12-31
 };
 
 /**

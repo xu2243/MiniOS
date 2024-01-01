@@ -6,7 +6,7 @@
 #define NR_FS 10		//modified by mingxuan 2020-10-18
 #define DEV_NAME_LEN 15
 //#define NR_fs 3
-#define NR_FS_OP 3		//modified by mingxuan 2020-10-18
+#define NR_FS_OP 5		//add by 1, modified by xxp 2023-12-31
 #define NR_SB_OP 2		//added by mingxuan 2020-10-30
 
 //#define FILE_MAX_LEN 512*4	//最大长度为4个扇区
@@ -29,6 +29,13 @@ struct vfs{
 	struct super_block *sb;		//added by mingxuan 2020-10-29
 	struct sb_op *s_op;			//added by mingxuan 2020-10-29
 };
+
+#define dev_tty0    0
+#define dev_tty1    1
+#define dev_tty2    2
+#define fat0        3
+#define orange      4
+#define PIPEFIFO    5
 
 int sys_open(void *uesp);
 int sys_close(void *uesp);

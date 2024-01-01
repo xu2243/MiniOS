@@ -37,6 +37,7 @@ _NR_delete 		equ 24 ;    //added by mingxuan 2019-5-17
 _NR_opendir 		equ 25 ;    //added by mingxuan 2019-5-17
 _NR_createdir  		equ 26 ;    //added by mingxuan 2019-5-17
 _NR_deletedir   	equ 27 ;    //added by mingxuan 2019-5-17
+_NR_pipe        equ 28 ;    //added by xuxinping 2023-12-16
 
 INT_VECTOR_SYS_CALL	equ 0x90
 
@@ -71,6 +72,7 @@ global	delete		;		//added by mingxuan 2019-5-17
 global  opendir		;		//added by mingxuan 2019-5-17
 global	createdir	;		//added by mingxuan 2019-5-17
 global  deletedir	;		//added by mingxuan 2019-5-17
+global  pipe        ;       //added by xuxinping 2023-12-16
 
 bits 32
 [section .text]
@@ -359,3 +361,15 @@ deletedir:
 	int	INT_VECTOR_SYS_CALL
 	pop	ebx
 	ret
+
+; ====================================================================
+;                              pipe		//add by xuxinping 2023.12.26
+; ====================================================================
+pipe:
+	push	ebx
+	mov	ebx, esp
+	mov	eax, _NR_pipe
+	int	INT_VECTOR_SYS_CALL
+	pop	ebx
+	ret
+
