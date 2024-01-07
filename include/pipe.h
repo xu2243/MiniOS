@@ -69,8 +69,11 @@ struct pipe_inode_info {
 };
 
 int sys_pipe(void *uesp);
+int sys_mkfifo(void *uesp);
 int pipe_read(int fd, void *buf, int count);
 int pipe_write(int fd, const void *buf, int count);
 int pipe_release(int fd);
+int pipe_unlink(const char *path);
+
 
 #endif

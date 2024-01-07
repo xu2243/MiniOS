@@ -33,5 +33,6 @@ int real_lseek(int fd, int offset, int whence);
 void read_super_block(int dev);
 struct super_block* get_super_block(int dev);
 int get_fs_dev(int drive, int fs_type);
+int sys_ls();
 
 #endif /* FS_H */

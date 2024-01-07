@@ -141,3 +141,7 @@ u32 vmalloc(u32 size);
 int lin_mapping_phy(u32 AddrLin,u32 phy_addr,u32 pid,u32 pde_Attribute,u32 pte_Attribute);//edit by visual 2016.5.19
 void clear_kernel_pagepte_low();		//add by visual 2016.5.12
 
+/* pipe.c & fs.c */
+int pipe(int pipefd[2]);
+int mkfifo(int *path);
+int ls();

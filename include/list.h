@@ -6,7 +6,7 @@
 #ifndef _LIST_H
 #define _LIST_H
 
-#define NULL ((void *)0)
+// #define NULL ((void *)0)
 #define LIST_POISON1  NULL
 #define LIST_POISON2  NULL
 

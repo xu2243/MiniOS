@@ -161,6 +161,12 @@ static u32 exec_load(u32 fd,const Elf32_Ehdr* Echo_Ehdr,const Elf32_Phdr Echo_Ph
 		return -1;
 	}
 
+    // 将基址和限制初始化为表示未初始化状态的值
+    p_proc_current->task.memmap.text_lin_base = 0;
+    p_proc_current->task.memmap.text_lin_limit = 0;
+    p_proc_current->task.memmap.data_lin_base = 0;
+    p_proc_current->task.memmap.data_lin_limit = 0;
+
 	// (This is bullshit)我们还不能确定elf中一共能有几个program，但就目前我们查看过的elf文件中，只出现过两中program，一种.text（R-E）和一种.data（RW-）
 	// 上面一句话导致了去年出现了诡异的错误，暂时只能说简单修复了一下，但是这个系统的权限就很混乱
 	for( ph_num=0; ph_num<Echo_Ehdr->e_phnum ; ph_num++ )
@@ -169,18 +175,31 @@ static u32 exec_load(u32 fd,const Elf32_Ehdr* Echo_Ehdr,const Elf32_Phdr Echo_Ph
 		{//最后一个program
 			break;
 		}
-		if (Echo_Phdr[ph_num].p_flags & 0x1)							// xx1，__E, executable seg must be code seg
-		{//.text
-			exec_elfcpy(fd,Echo_Phdr[ph_num],PG_P  | PG_USU | PG_RWR);//进程代码段
-			p_proc_current->task.memmap.text_lin_base = Echo_Phdr[ph_num].p_vaddr;	
-			p_proc_current->task.memmap.text_lin_limit = Echo_Phdr[ph_num].p_vaddr + Echo_Phdr[ph_num].p_memsz;
-		}
-		else if (Echo_Phdr[ph_num].p_flags & 0x4)						// 1xx，R__, treat all readable but not executable segs as data seg, though some may be RW and some RO
-		{//.data
-			exec_elfcpy(fd,Echo_Phdr[ph_num],PG_P  | PG_USU | PG_RWW);//进程数据段
-			p_proc_current->task.memmap.data_lin_base = Echo_Phdr[ph_num].p_vaddr;
-			p_proc_current->task.memmap.data_lin_limit = Echo_Phdr[ph_num].p_vaddr + Echo_Phdr[ph_num].p_memsz;
-		}
+        if (Echo_Phdr[ph_num].p_flags & 0x1) { // .text 段
+            exec_elfcpy(fd, Echo_Phdr[ph_num], PG_P | PG_USU | PG_RWR);
+
+            // 更新文本段限制
+            if (p_proc_current->task.memmap.text_lin_base == 0 ||
+                p_proc_current->task.memmap.text_lin_base > Echo_Phdr[ph_num].p_vaddr) {
+                p_proc_current->task.memmap.text_lin_base = Echo_Phdr[ph_num].p_vaddr;
+            }
+
+            if (p_proc_current->task.memmap.text_lin_limit < Echo_Phdr[ph_num].p_vaddr + Echo_Phdr[ph_num].p_memsz) {
+                p_proc_current->task.memmap.text_lin_limit = Echo_Phdr[ph_num].p_vaddr + Echo_Phdr[ph_num].p_memsz;
+            }
+        } else if (Echo_Phdr[ph_num].p_flags & 0x4) { // .data 段
+            exec_elfcpy(fd, Echo_Phdr[ph_num], PG_P | PG_USU | PG_RWW);
+
+            // 更新数据段限制
+            if (p_proc_current->task.memmap.data_lin_base == 0 ||
+                p_proc_current->task.memmap.data_lin_base > Echo_Phdr[ph_num].p_vaddr) {
+                p_proc_current->task.memmap.data_lin_base = Echo_Phdr[ph_num].p_vaddr;
+            }
+
+            if (p_proc_current->task.memmap.data_lin_limit < Echo_Phdr[ph_num].p_vaddr + Echo_Phdr[ph_num].p_memsz) {
+                p_proc_current->task.memmap.data_lin_limit = Echo_Phdr[ph_num].p_vaddr + Echo_Phdr[ph_num].p_memsz;
+            }
+        }
 		else 
 		{
 			vga_write_str_color("exec_load: unKnown elf'program!",0x74);

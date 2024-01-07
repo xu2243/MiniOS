@@ -466,24 +466,24 @@ static int do_open(MESSAGE *fs_msg)
 		f_desc_table[i].fd_mode = flags;
 		f_desc_table[i].fd_pos = 0;
 
-		int imode = pin->i_mode & I_TYPE_MASK;
+		// int imode = pin->i_mode & I_TYPE_MASK;
 
-		if (imode == I_CHAR_SPECIAL) {
-			// MESSAGE driver_msg;
+		// if (imode == I_CHAR_SPECIAL) {
+		// 	// MESSAGE driver_msg;
 
-			// int dev = pin->i_start_sect;
-			//?
-		}
-		else if (imode == I_DIRECTORY) {
-			if(pin->i_num != ROOT_INODE) {
-				panic("pin->i_num != ROOT_INODE");
-			}
-		}
-		else {
-			if(pin->i_mode != I_REGULAR) {
-				panic("Panic: pin->i_mode != I_REGULAR");
-			}
-		}
+		// 	// int dev = pin->i_start_sect;
+		// 	//?
+		// }
+		// else if (imode == I_DIRECTORY) {
+		// 	if(pin->i_num != ROOT_INODE) {
+		// 		panic("pin->i_num != ROOT_INODE");
+		// 	}
+		// }
+		// else {
+		// 	if(pin->i_mode != I_REGULAR) {
+		// 		panic("Panic: pin->i_mode != I_REGULAR");
+		// 	}
+		// }
 	}
 	else {
 		return -1;
@@ -1557,4 +1557,54 @@ static int do_lseek(MESSAGE *fs_msg)
 	}
 	p_proc_current->task.filp[fd]->fd_pos = pos;
 	return pos;
+}
+
+/*****************************************************************************
+ *                                    ls
+ *****************************************************************************/
+/**
+ * List all available filenames in the root directory.
+ *
+ *****************************************************************************/
+int do_ls()
+{
+    int i, j;
+
+    // Iterate through the directory entries and print filenames
+    int dir_blk0_nr = root_inode->i_start_sect;
+    int nr_dir_blks = (root_inode->i_size + SECTOR_SIZE - 1) / SECTOR_SIZE;
+    int nr_dir_entries =
+        root_inode->i_size / DIR_ENTRY_SIZE; 
+
+    kprintf("\n");
+        
+    int m = 0;
+    struct dir_entry * pde;
+    char fsbuf[SECTOR_SIZE];
+
+    for (i = 0; i < nr_dir_blks; i++) {
+        RD_SECT(root_inode->i_dev, dir_blk0_nr + i, fsbuf);
+        pde = (struct dir_entry *)fsbuf;
+
+        for (j = 0; j < SECTOR_SIZE / DIR_ENTRY_SIZE; j++, pde++) {
+            // kprintf("*");
+            if (pde->inode_nr != 0) {
+                // Print the filename
+                kprintf("%s ", pde->name);
+            }
+
+            if (++m > nr_dir_entries) {
+                break;
+            }
+        }
+
+        if (m > nr_dir_entries) /* all entries have been iterated */
+            break;
+    }
+    return 0;
+}
+
+
+int sys_ls() {
+    return do_ls();
 }

@@ -38,6 +38,8 @@ _NR_opendir 		equ 25 ;    //added by mingxuan 2019-5-17
 _NR_createdir  		equ 26 ;    //added by mingxuan 2019-5-17
 _NR_deletedir   	equ 27 ;    //added by mingxuan 2019-5-17
 _NR_pipe        equ 28 ;    //added by xuxinping 2023-12-16
+_NR_mkfifo      equ 29
+_NR_ls          equ 30
 
 INT_VECTOR_SYS_CALL	equ 0x90
 
@@ -73,6 +75,8 @@ global  opendir		;		//added by mingxuan 2019-5-17
 global	createdir	;		//added by mingxuan 2019-5-17
 global  deletedir	;		//added by mingxuan 2019-5-17
 global  pipe        ;       //added by xuxinping 2023-12-16
+global  mkfifo
+global  ls
 
 bits 32
 [section .text]
@@ -373,3 +377,12 @@ pipe:
 	pop	ebx
 	ret
 
+mkfifo:
+	mov	eax, _NR_mkfifo
+	int	INT_VECTOR_SYS_CALL
+	ret
+
+ls:
+	mov	eax, _NR_ls
+	int	INT_VECTOR_SYS_CALL
+	ret

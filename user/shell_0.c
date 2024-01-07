@@ -19,10 +19,10 @@ int main(int arg, char *argv[])
 	while (1)
 	{
 		printf("\nminiOS:/ $ ");
-		if (gets(buf) && strlen(buf) != 0)
-		{
-			if (exec(buf) != 0)
-			{
+		if (gets(buf) && strlen(buf) != 0) {   
+            if (strncmp("ls", buf, 2) == 0) {
+                ls();
+            } else if (exec(buf) != 0) {
 				printf("exec failed: file not found!\n");
 				continue;
 			}

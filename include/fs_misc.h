@@ -96,7 +96,7 @@ struct inode {
  * Note that this is the size of the struct in the device, \b NOT in memory.
  * The size in memory is larger because of some more members.
  */
-#define	INODE_SIZE	32
+#define	INODE_SIZE	36
 
 /**
  * @struct dir_entry

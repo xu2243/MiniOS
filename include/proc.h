@@ -15,6 +15,10 @@
  * below instead.
  * added by xw, 17/12/11
  */
+
+#ifndef PROC_H
+#define PROC_H
+
 #define INIT_STACK_SIZE 1024 * 8	//new kernel stack is 8kB
 #define P_STACKBASE 0
 #define GSREG 0
@@ -174,3 +178,5 @@ typedef struct s_task {
 
 //added by zcr
 #define proc2pid(x) (x - proc_table)
+
+#endif

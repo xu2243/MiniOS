@@ -104,6 +104,7 @@ struct inode *get_pipe_inode() {
     struct inode *inode = (void*)K_PHY2LIN(sys_kmalloc(sizeof(struct inode)));
     struct pipe_inode_info *pipe = alloc_pipe_info();
 
+    inode->i_mode = I_NAMED_PIPE;
     inode->i_dev = PIPEFIFO;
     inode->i_num = get_nxt_pipe_inode_num();
     inode->i_pipe = pipe;
@@ -123,7 +124,7 @@ int get_available_fd() {
 
 
 /**
- * This function creates a unidirectional communication channel using a pipe. The pipe_fds array
+ * This function creates a unidirectional communication channel using a pipe. The pipefd array
  * is used to return two file descriptors: pipefd[0] for reading from the pipe and pipefd[1]
  * for writing to the pipe. Data written to the write end of the pipe is buffered by the kernel
  * until it is read from the read end of the pipe. If successful, the function returns 0; otherwise,
@@ -326,7 +327,15 @@ int pipe_release(int fd) {
     return 0;
 }
 
+int pipe_unlink(const char *path) {
+    return 0;
+}
+
 
 int sys_pipe(void *uesp) {
     return do_pipe((int *)get_arg(uesp, 1));
+}
+
+int sys_mkfifo(void *uesp) {
+    return 0;
 }

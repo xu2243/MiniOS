@@ -87,10 +87,12 @@ void init_fileop_table()
     f_op_table[2].deletedir = DeleteDir;
 
     // table[3] for pipefifo vfs
-    f_op_table[3].create = CreateFile; // placeholder, wait to be update
+    // f_op_table[3].create = mkfifo;
+    f_op_table[2].open = real_open; 
     f_op_table[3].close = pipe_release;
     f_op_table[3].write = pipe_write;
     f_op_table[3].read = pipe_read;
+    f_op_table[3].unlink = pipe_unlink;
 
 }
 
@@ -179,8 +181,8 @@ static void init_vfs_table(){  // modified by mingxuan 2020-10-30
 
     vfs_table[PIPEFIFO].fs_name = "pipefifo"; 
     vfs_table[PIPEFIFO].op = &f_op_table[3];
-    // vfs_table[4].sb = &super_block[3];      
-    // vfs_table[4].s_op = &sb_op_table[0];    
+    vfs_table[4].sb = &super_block[3];      
+    vfs_table[4].s_op = &sb_op_table[0];    
 
 }
 

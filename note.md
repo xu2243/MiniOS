@@ -68,7 +68,19 @@ system_call sys_call_table[NR_SYS_CALL] = {
 
 ### linux way
 
+在linux里，file结构体有一个file_operations字段。open，write等系统调用可以直接调用fd对应的fop接口进行操作。
+
 ```c
+/* fs.h */
+struct file {
+	/* other fields */
+	struct path		f_path;
+	struct inode		*f_inode;	/* cached value */
+	const struct file_operations	*f_op;
+	/* other fields */
+} __randomize_layout
+
+/* pipe.c */
 const struct file_operations pipefifo_fops = {
 	.open		= fifo_open,
 	.llseek		= no_llseek,
@@ -84,10 +96,122 @@ const struct file_operations pipefifo_fops = {
 
 ### what did i do
 
+首先我们有对应的调用函数：
+
 ```c
 int sys_pipe(void *uesp);
 int pipe_read(int fd, void *buf, int count);
 int pipe_write(int fd, const void *buf, int count);
 int pipe_release(int fd);
 ```
+
+在miniOS中，read的调用链是read->do_vread->read_op.
+
+在这个调用链中，值得注意的是miniOS是根据vfs_table对应的op操作来选择的。如果是orange系统，则选择orange系统的op；如果是fat32系统，则选择fat32系统的op。
+
+```c
+int do_vread(int fd, char *buf, int count) {
+    int index = p_proc_current->task.filp[fd]->dev_index;
+    return vfs_table[index].op->read(fd, buf, count);   //modified by mingxuan 2020-10-18
+}
+```
+
+因此，在我们最初的设计中，我直接定义了一个新的vfs，以便文件的读写操作能直接对应到我们的pipe读写操作：
+
+```c
+// table[3] for pipefifo vfs
+f_op_table[3].create = fifo_create; 
+f_op_table[3].close = pipe_release;
+f_op_table[3].write = pipe_write;
+f_op_table[3].read = pipe_read;
+f_op_table[3].unlink = pipe_unlink;
+
+vfs_table[PIPEFIFO].fs_name = "pipefifo"; 
+vfs_table[PIPEFIFO].op = &f_op_table[3];
+```
+
+但是这显然不是一个正确的设计，因为我们的fifo最后应该出现在orange的文件目录里，而orange甚至还给我们的fifo关键字留了一个宏定义（这是一个仿照`linux-0.12`的宏定义设计）！
+
+```c
+/* fs_const.h */
+/* INODE::i_mode (octal, lower 32 bits reserved) */
+#define I_TYPE_MASK     0170000			// 文件类型掩码，用于提取文件类型部分的位
+#define I_REGULAR       0100000			// 常规文件的类型标志
+#define I_BLOCK_SPECIAL 0060000			// 块设备文件的类型标志
+#define I_DIRECTORY     0040000			// 目录的类型标志
+#define I_CHAR_SPECIAL  0020000			// 字符设备文件的类型标志
+#define I_NAMED_PIPE	0010000			// 命名管道（FIFO）的类型标志
+```
+
+也就是说，orange的文件系统用inode的i_mode字段把文件分为了：目录文件，常规文件，块设备文件，字符设备文件，fifo文件等。
+
+但是在具体的操作中，系统调用并不区分这些文件类型
+
+
+
+# NOTE
+
+在linux中，文件目录被抽象成了一个虚拟文件系统，每个”目录文件“管理目录下的文件条目。对于文件识别，则是使用inode中的superblock所指向的魔数，或者直接通过后缀来识别。
+
+而在miniOS中，没有这样独立的目录管理，它只有一个根目录，你需要直接和磁盘硬件交互：
+
+```c
+ /* 在 base.c 的代码中，miniOS直接默认了 2 是父目录的所在簇，也就是根目录。*/
+ STATE PathToCluster(PCHAR path, PDWORD cluster)
+{
+	/* ... */
+	DWORD parentCluster=2;
+	/* ... */
+	if(i>=len)//说明是根目录
+	{
+		*cluster=2;
+		return OK;
+	}
+	/* ... */
+	*cluster=parentCluster;
+	return OK;
+}
+
+// where says in fs.c
+/*
+ * In Orange'S FS v1.0, all files are stored in the root directory.
+ * There is no sub-folder thing.
+ */
+```
+
+文件路径调用需要在路径前加上文件所属的系统，这样它才能正常识别，非常的独特：
+
+```c
+/*
+ * You need to add the system to which the file belongs as a prefix for it to be correctly 
+ * identified. MiniOS uses the get_index function to retrieve its device.
+ * Examples are as follows.
+ */
+exec("orange/shell_0.bin");
+open("fat0/test.tt", O_CREAT));
+
+
+/*
+ * in vfs.c/do_vopen()
+ * System prefix is needed to identify the file dev.
+ */
+int do_vopen(const char *path, int flags) {
+    /* ... */
+    int index;
+    
+    index = get_index(pathname);
+    if(index == -1){
+        kprintf("pathname error! path: %s\n", path);
+        return -1;
+    }
+	/* here to be used */
+    fd = vfs_table[index].op->open(pathname, flags);    //modified by mingxuan 2020-10-18
+    
+	/* ... */
+                   
+    return fd;    
+}
+```
+
+
 
