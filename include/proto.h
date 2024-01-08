@@ -145,3 +145,4 @@ void clear_kernel_pagepte_low();		//add by visual 2016.5.12
 int pipe(int pipefd[2]);
 int mkfifo(int *path);
 int ls();
+int dup2(int oldfd, int newfd);

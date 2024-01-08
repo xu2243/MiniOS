@@ -32,6 +32,7 @@ KERN_SRCFILES :=kernel/kernel.asm	\
 		kernel/protect.c	\
 		kernel/uart.c	\
 		kernel/pipe.c	\
+		kernel/dup2.c \
 
 
 KERN_OBJFILES	:= $(patsubst %.c, $(OBJDIR)/%.o, $(KERN_SRCFILES))
