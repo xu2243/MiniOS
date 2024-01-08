@@ -14,8 +14,11 @@
 #include "fs_const.h"
 #include "fs.h"
 #include "fs_misc.h"
+#include "string.h"
 
 #define MAX_PIPE_INODE 512
+
+extern struct file_desc f_desc_table[NR_FILE_DESC];
 
 void init_queue_head(wait_queue_head_t *wq) {
     INIT_LIST_HEAD(&wq->wait_queue);
@@ -27,66 +30,65 @@ void wait_queue_push(wait_queue_head_t *wq, PROCESS *proc) {
 }
 
 PROCESS *wait_queue_head(wait_queue_head_t *wq) {
-    return ((wait_queue_head_t *)(wq->wait_queue.next))->proc;
+    if (!list_empty(&wq->wait_queue)) {
+        wait_queue_head_t *p = list_first_entry(&wq->wait_queue, wait_queue_head_t, wait_queue);
+        return p->proc;
+    }
+    return NULL;
 }
 
 void wait_queue_pop(wait_queue_head_t *wq) {
-    list_del(wq->wait_queue.next);
+    if (!list_empty(&wq->wait_queue)) {
+        wait_queue_head_t *p = list_first_entry(&wq->wait_queue, wait_queue_head_t, wait_queue);
+        list_del(&p->wait_queue);
+        sys_free(p); // 在这里释放内存
+    }
 }
 
 int wait_queue_is_empty(wait_queue_head_t *wq) {
     return list_empty(&wq->wait_queue);
 }
 
-struct pipe_inode_map {
-    int max_inodes;             /**< 最大inode数量 */
-    int *allocated_inodes;      /**< 已分配的inode数组，用于快速查找 */
-}pipe_map;
+// struct pipe_inode_map {
+//     int max_inodes;             /**< 最大inode数量 */
+//     int *allocated_inodes;      /**< 已分配的inode数组，用于快速查找 */
+// }pipe_map;
 
-// 初始化pipe_inode_map结构
-void init_pipe_inode_map() {
-    pipe_map.max_inodes = MAX_PIPE_INODE;
-    pipe_map.allocated_inodes = (int *)sys_kmalloc(sizeof(int) * MAX_PIPE_INODE);
-    for (int i = 0; i < MAX_PIPE_INODE; i++) {
-        pipe_map.allocated_inodes[i] = 0; // 初始化为未分配状态
-    }
-}
+// // 初始化pipe_inode_map结构
+// void init_pipe_inode_map() {
+//     pipe_map.max_inodes = MAX_PIPE_INODE;
+//     pipe_map.allocated_inodes = (int *)sys_kmalloc(sizeof(int) * MAX_PIPE_INODE);
+//     for (int i = 0; i < MAX_PIPE_INODE; i++) {
+//         pipe_map.allocated_inodes[i] = 0; // 初始化为未分配状态
+//     }
+// }
 
-// 释放pipe_inode_map结构占用的内存
-void cleanup_pipe_inode_map() {
-    sys_free(pipe_map.allocated_inodes);
-}
+// // 释放pipe_inode_map结构占用的内存
+// void cleanup_pipe_inode_map() {
+//     sys_free(pipe_map.allocated_inodes);
+// }
 
-// 获取下一个可用的pipe inode编号
-static int get_nxt_pipe_inode_num() {
-    for (int i = 0; i < pipe_map.max_inodes; i++) {
-        if (pipe_map.allocated_inodes[i] == 0) {
-            pipe_map.allocated_inodes[i] = 1;
-            return i;
-        }
-    }
-    return -1; // 没有可用的inode编号
-}
+// // 获取下一个可用的pipe inode编号
+// static int get_nxt_pipe_inode_num() {
+//     for (int i = 0; i < pipe_map.max_inodes; i++) {
+//         if (pipe_map.allocated_inodes[i] == 0) {
+//             pipe_map.allocated_inodes[i] = 1;
+//             return i;
+//         }
+//     }
+//     return -1; // 没有可用的inode编号
+// }
 
 // 释放指定的pipe inode编号
-static void release_pipe_inode_num(int inode_number) {
-    pipe_map.allocated_inodes[inode_number] = 0;
-}
+// static void release_pipe_inode_num(int inode_number) {
+//     pipe_map.allocated_inodes[inode_number] = 0;
+// }
 
 
 struct pipe_inode_info *alloc_pipe_info() {
     struct pipe_inode_info *pipe = (void*)K_PHY2LIN(sys_kmalloc(sizeof(struct pipe_inode_info)));
-
-    pipe->mutex = 0;
-    pipe->head = 0;
-    pipe->tail = 0;
-    pipe->max_usage = 0;
+    memset(pipe, 0, sizeof(struct pipe_inode_info));
     pipe->ring_size = PIPE_BUF_PAGE_NUM * PAGE_SIZE;
-    pipe->readers = 0;
-    pipe->writers = 0;
-    pipe->files = 0;
-    pipe->r_counter = 1;
-    pipe->w_counter = 1;
     pipe->user = p_proc_current;
 
     init_queue_head(&pipe->rd_wait);
@@ -100,19 +102,32 @@ struct pipe_inode_info *alloc_pipe_info() {
 }
 
 
-struct inode *get_pipe_inode() {
-    struct inode *inode = (void*)K_PHY2LIN(sys_kmalloc(sizeof(struct inode)));
+struct inode *get_pipe_inode(int i_mode) {
+    struct inode *inode = NULL;
+    if (i_mode == I_NAMED_PIPE) {
+        /* This is the named pipe, we alloc it into the inode table */
+        int inode_nr = alloc_imap_bit(PIPEFIFO);
+        int free_sect_nr = alloc_smap_bit(PIPEFIFO, NR_DEFAULT_FILE_SECTS);
+        inode = get_inode(PIPEFIFO, inode_nr);
+        inode->i_num = inode_nr;
+    } else
+        /* This is the unnamed pipe, as a result, we haven't assigned it 
+         * an inode number and have allocated memory for it using malloc 
+         * independently, instead of taking the inode table in fs.c.
+         */
+        inode = (void*)K_PHY2LIN(sys_kmalloc(sizeof(struct inode)));
     struct pipe_inode_info *pipe = alloc_pipe_info();
 
-    inode->i_mode = I_NAMED_PIPE;
+    inode->i_mode = i_mode;
     inode->i_dev = PIPEFIFO;
-    inode->i_num = get_nxt_pipe_inode_num();
+    // inode->i_num = 0;
     inode->i_pipe = pipe;
 
     return inode;
 }
 
-int get_available_fd() {
+/* find a free slot in PROCESS::filp[] */
+int get_available_proc_fd() {
     for (int i = 0; i < NR_FILES; i++) {
         if(p_proc_current->task.filp[i]->flag == 0) {
             // p_proc_current->task.filp[i]->flag = 1;
@@ -122,6 +137,61 @@ int get_available_fd() {
     return -1;
 }
 
+/* find a free slot in f_desc_table[] */
+int get_available_fd_table() {
+	for (int i = 0; i < NR_FILE_DESC; i++)
+		//modified by mingxuan 2019-5-17
+		if (f_desc_table[i].flag == 0)
+			return i;
+    return -1;
+}
+
+/* mode == READ_MODE or WRITE_MODE */
+int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
+    if (mode != READ_MODE && mode != WRITE_MODE) {
+        return -1;
+    }
+    int f_table_idx = get_available_fd_table();
+    if (f_table_idx == -1) {
+        return -1;
+    }
+
+    int fd_num = get_available_proc_fd();
+    if (fd_num == -1) {
+        return -1;
+    }
+
+    /* f_desc_table doesnt have a mutex, probably take concurrency error */
+    struct file_desc *pfd = &f_desc_table[f_table_idx];
+    pfd->flag = 1;
+
+    union ptr_node *ptr = &pfd->fd_node;
+
+    // r_fd->fd_mode = ?; 
+    // it feels really confused when you look into the source code of miniOS. i guess it was used to
+    // discribed xwr mod or some kind like that.
+    // I can hardly find any macro definitions related to the possible flags.
+    // so I just use it on my own way, distinguish read and write mode 
+
+    pfd->fd_mode = mode;
+    pfd->dev_index = PIPEFIFO;
+    ptr->fd_inode = pipe_inode;
+    pipe_inode->i_pipe->files++;
+    pipe_inode->i_cnt++;
+
+    if (mode == READ_MODE) pipe_inode->i_pipe->r_counter++;
+    else if (mode == READ_MODE) pipe_inode->i_pipe->w_counter++;
+
+    // readers and writers should be added by their own 
+    // pipe_inode->i_pipe->readers++;
+    // pipe_inode->i_pipe->writers++;
+
+    p_proc_current->task.filp[fd_num] = pfd;
+    
+    *pipefd = fd_num;
+    
+    return 0;
+}
 
 /**
  * This function creates a unidirectional communication channel using a pipe. The pipefd array
@@ -139,46 +209,15 @@ int get_available_fd() {
  * 
  */
 int do_pipe(int pipefd[2]) {
-    struct file_desc *r_fd = (void*)K_PHY2LIN(sys_kmalloc(sizeof (struct file_desc)));
-    struct file_desc *w_fd = (void*)K_PHY2LIN(sys_kmalloc(sizeof (struct file_desc)));
-
-    union ptr_node *r_ptr = (void*)K_PHY2LIN(sys_kmalloc(sizeof (union ptr_node)));
-    union ptr_node *w_ptr = (void*)K_PHY2LIN(sys_kmalloc(sizeof (union ptr_node)));
-
-    struct inode *pipe_inode = get_pipe_inode();
-    // struct inode *w_inode = get_pipe_inode();
-
-    int r_fd_num = get_available_fd();
-    int w_fd_num = get_available_fd();
-
-    // r_fd->fd_mode = ?; 
-    // it feels really confused when you look into the source code of miniOS. i guess it was used to
-    // discribed xwr mod or some kind like that.
-    // I can hardly find any macro definitions related to the possible flags.
-    // so I just use it on my own way, distinguish read and write mode 
-
-    r_fd->fd_mode = READ_MODE;
-    w_fd->fd_mode = WRITE_MODE;
-
-    r_fd->dev_index = PIPEFIFO;
-    w_fd->dev_index = PIPEFIFO;
-
-    r_fd->flag = 1;
-    w_fd->flag = 1;
-
-    r_ptr->fd_inode = pipe_inode;
-    w_ptr->fd_inode = pipe_inode;
-
-    pipe_inode->i_pipe->files += 2;
-    // readers and writers should be added by their own 
-    // pipe_inode->i_pipe->readers++;
-    // pipe_inode->i_pipe->writers++;
-
-    p_proc_current->task.filp[r_fd_num] = r_fd;
-    p_proc_current->task.filp[w_fd_num] = w_fd;
-    
-    pipefd[0] = r_fd_num;
-    pipefd[1] = w_fd_num;
+    struct inode *pipe_inode = get_pipe_inode(0);
+    if (create_pipe(&pipefd[0], pipe_inode, READ_MODE) == -1) {
+        /* error handler */
+        return -1;
+    }
+    if (create_pipe(&pipefd[1], pipe_inode, WRITE_MODE) == -1) {
+        /* error handler */
+        return -1;
+    }
     
     return 0;
 }
@@ -305,31 +344,52 @@ void __free(unsigned addr, unsigned size) {
     sys_free((void *)&memarg);
 }
 
-int pipe_release(int fd) {
-    struct file_desc *file = p_proc_current->task.filp[fd];
-    struct pipe_inode_info *pipe_info = file->fd_node.fd_inode->i_pipe;
+int pipe_info_release(struct pipe_inode_info *pipe_info) {
+    // struct pipe_inode_info *pipe_info = pipe_inode->i_pipe;
+    __free((unsigned)pipe_info->bufs, pipe_info->ring_size);
+    __free((unsigned)pipe_info, sizeof(struct pipe_inode_info));
+    return 0;
+}
+
+int pipe_close(int fd) {
+    struct file_desc *pfile = p_proc_current->task.filp[fd];
+    struct inode *pipe_inode = pfile->fd_node.fd_inode;
+    struct pipe_inode_info *pipe_info = pfile->fd_node.fd_inode->i_pipe;
 
     pipe_info->files--;
-    if (file->fd_mode == READ_MODE) pipe_info->r_counter--;
-    if (file->fd_mode == WRITE_MODE) pipe_info->w_counter--;
-
-    struct memfree memarg;
+    pipe_inode->i_cnt--;
+    if (pfile->fd_mode == READ_MODE) pipe_info->r_counter--;
+    if (pfile->fd_mode == WRITE_MODE) pipe_info->w_counter--;
 
     if (pipe_info->files == 0) {
-        release_pipe_inode_num(file->fd_node.fd_inode->i_num);
-        __free((unsigned)pipe_info->bufs, pipe_info->ring_size);
-        __free((unsigned)pipe_info, sizeof(struct pipe_inode_info));
-        __free((unsigned)file->fd_node.fd_inode, sizeof(struct inode));
+        pipe_info_release(pipe_inode->i_pipe);
     }
-    __free((unsigned)&file->fd_node, sizeof(union ptr_node));
-    file->flag = 0;
-    __free((unsigned)file, sizeof(struct file_desc));
+    p_proc_current->task.filp[fd]->fd_node.fd_inode = 0;
+    p_proc_current->task.filp[fd]->flag = 0;
+    p_proc_current->task.filp[fd] = 0;
     return 0;
 }
 
-int pipe_unlink(const char *path) {
-    return 0;
+int do_mkfifo(const char *path) {
+    char filename[MAX_PATH];
+    struct inode *pipe_inode = get_pipe_inode(I_NAMED_PIPE);
+	struct inode * dir_inode;
+
+	if (strip_path(filename, path, &dir_inode) != 0)
+		return -1;
+
+	new_dir_entry(dir_inode, pipe_inode->i_num, filename);
+
+    /* update dir inode */
+	sync_inode(dir_inode);
+
+	return 0;
 }
+
+// int fifo_unlink(const char *path) {
+//     pipe_info_release();
+//     real_unlink(path);
+// }
 
 
 int sys_pipe(void *uesp) {
@@ -337,5 +397,5 @@ int sys_pipe(void *uesp) {
 }
 
 int sys_mkfifo(void *uesp) {
-    return 0;
+    return do_mkfifo((char *)get_arg(uesp, 1));
 }

@@ -13,6 +13,7 @@
 #include "fs_misc.h"
 #include "stdio.h"
 #include "assert.h"
+#include "pipe.h"
 
 //added by xw, 18/8/28
 /* data */
@@ -49,17 +50,17 @@ int real_lseek(int fd, int offset, int whence);	  //modified by mingxuan 2019-5-
 static int rw_sector(int io_type, int dev, u64 pos, int bytes, int proc_nr, void* buf);
 static int rw_sector_sched(int io_type, int dev, int pos, int bytes, int proc_nr, void* buf);
 
-static int strip_path(char * filename, const char * pathname, struct inode** ppinode);
+int strip_path(char * filename, const char * pathname, struct inode** ppinode);
 static int search_file(char *path);
 static struct inode* create_file(char *path, int flags);
-static struct inode* get_inode(int dev, int num);
+struct inode* get_inode(int dev, int num);
 static struct inode* get_inode_sched(int dev, int num);
 static struct inode* new_inode(int dev, int inode_nr, int start_sect);
 static void put_inode(struct inode *pinode);
-static void sync_inode(struct inode *p);
-static void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename);
-static int alloc_imap_bit(int dev);
-static int alloc_smap_bit(int dev, int nr_sects_to_alloc);
+void sync_inode(struct inode *p);
+void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename);
+int alloc_imap_bit(int dev);
+int alloc_smap_bit(int dev, int nr_sects_to_alloc);
 
 static int memcmp(const void *s1, const void *s2, int n);
 //~xw
@@ -646,7 +647,7 @@ static int search_file(char * path)
  * 
  * @return Zero if success, otherwise the pathname is not valid.
  *****************************************************************************/
-static int strip_path(char * filename, const char * pathname, struct inode** ppinode)
+int strip_path(char * filename, const char * pathname, struct inode** ppinode)
 {
 	const char * s = pathname;
 	char * t = filename;
@@ -747,7 +748,7 @@ struct super_block * get_super_block(int dev)	//modified by mingxuan 2020-10-30
  * 
  * @return The inode ptr requested.
  *****************************************************************************/
-static struct inode * get_inode(int dev, int num)
+struct inode * get_inode(int dev, int num)
 {
 	if (num == 0)
 		return 0;
@@ -756,7 +757,13 @@ static struct inode * get_inode(int dev, int num)
 	struct inode * q = 0;
 	for (p = &inode_table[0]; p < &inode_table[NR_INODE]; p++) {
 		if (p->i_cnt) {	/* not a free slot */
-			if ((p->i_dev == dev) && (p->i_num == num)) {
+            /* Logic modified: Previously, the condition was ((p->dev == dev) && (p->i_num == num)).
+             * However, this condition is not suitable for i_named_pipe. i_named_pipe utilizes the
+             * pipe_read and pipe_write operations, implying that its device (dev) is different from "orange."
+             * They simply share the same super_block and directory. The old logic would check whether
+             * the inode's device is "orange".
+             */
+			if ((p->i_num == num)) {
 				/* this is the inode we want */
 				p->i_cnt++;
 				return p;
@@ -800,7 +807,7 @@ static struct inode * get_inode_sched(int dev, int num)
 	struct inode * q = 0;
 	for (p = &inode_table[0]; p < &inode_table[NR_INODE]; p++) {
 		if (p->i_cnt) {	/* not a free slot */
-			if ((p->i_dev == dev) && (p->i_num == num)) {
+			if ((p->i_num == num)) {
 				/* this is the inode we want */
 				p->i_cnt++;
 				return p;
@@ -859,7 +866,7 @@ static void put_inode(struct inode * pinode)
  * 
  * @param p I-node ptr.
  *****************************************************************************/
-static void sync_inode(struct inode * p)
+void sync_inode(struct inode * p)
 {
 	struct inode * pinode;
 	struct super_block * sb = get_super_block(p->i_dev);
@@ -919,7 +926,7 @@ static struct inode * new_inode(int dev, int inode_nr, int start_sect)
  * @param inode_nr   I-node nr of the new file.
  * @param filename   Filename of the new file.
  *****************************************************************************/
-static void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename)
+void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename)
 {
 	/* write the dir_entry */
 	int dir_blk0_nr = dir_inode->i_start_sect;
@@ -979,7 +986,7 @@ static void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename)
  * 
  * @return  I-node nr.
  *****************************************************************************/
-static int alloc_imap_bit(int dev)
+int alloc_imap_bit(int dev)
 {
 	int inode_nr = 0;
 	int i, j, k;
@@ -1028,7 +1035,7 @@ static int alloc_imap_bit(int dev)
  * 
  * @return  The 1st sector nr allocated.
  *****************************************************************************/
-static int alloc_smap_bit(int dev, int nr_sects_to_alloc)
+int alloc_smap_bit(int dev, int nr_sects_to_alloc)
 {
 	/* int nr_sects_to_alloc = NR_DEFAULT_FILE_SECTS; */
 
@@ -1322,144 +1329,11 @@ int real_unlink(const char * pathname)	//modified by mingxuan 2019-5-17
 	return do_unlink(&fs_msg);
 }
 
-/// zcr copied from the ch9/h/fs/link.c and modified it
-/*****************************************************************************
- *                                do_unlink
- *****************************************************************************/
-/**
- * Remove a file.
- *
- * @note We clear the i-node in inode_array[] although it is not really needed.
- *       We don't clear the data bytes so the file is recoverable.
- * 
- * @return On success, zero is returned.  On error, -1 is returned.
- *****************************************************************************/
-static int do_unlink(MESSAGE *fs_msg)
-{
-	char pathname[MAX_PATH];
-
-	/* get parameters from the message */
-	int name_len = fs_msg->NAME_LEN;	/* length of filename */
-	int src = fs_msg->source;	/* caller proc nr. */
-	// assert(name_len < MAX_PATH);
-	memcpy((void*)va2la(proc2pid(p_proc_current), pathname),
-		  (void*)va2la(src, fs_msg->PATHNAME),
-		  name_len);
-	pathname[name_len] = 0;
-
-	if (strcmp(pathname , "/") == 0) {
-		kprintf("FS:do_unlink():: cannot unlink the root\n");
-		return -1;
-	}
-
-	int inode_nr = search_file(pathname);
-	if (inode_nr == INVALID_INODE) {	/* file not found */
-		kprintf("FS::do_unlink():: search_file() returns invalid inode: %s\n", pathname);
-		return -1;
-	}
-
-	char filename[MAX_PATH];
-	struct inode * dir_inode;
-	if (strip_path(filename, pathname, &dir_inode) != 0)
-		return -1;
-
-	struct inode * pin = get_inode_sched(dir_inode->i_dev, inode_nr);	//modified by xw, 18/8/28
-
-	if (pin->i_mode != I_REGULAR) { /* can only remove regular files */
-		kprintf("cannot remove file %s, because it is not a regular file.\n", pathname);
-		return -1;
-	}
-
-	if (pin->i_cnt > 1) {	/* the file was opened */
-		kprintf("cannot remove file %s, because pin->i_cnt is %d\n", pathname, pin->i_cnt);
-		return -1;
-	}
-
-	struct super_block * sb = get_super_block(pin->i_dev);
-
-	/*************************/
-	/* free the bit in i-map */
-	/*************************/
-	int byte_idx = inode_nr / 8;
-	int bit_idx = inode_nr % 8;
-	// assert(byte_idx < SECTOR_SIZE);	/* we have only one i-map sector */
-	/* read sector 2 (skip bootsect and superblk): */
-	char fsbuf[SECTOR_SIZE];	//local array, to substitute global fsbuf. added by xw, 18/12/27
-	RD_SECT_SCHED(pin->i_dev, 2, fsbuf);		//modified by xw, 18/12/27
-	// assert(fsbuf[byte_idx % SECTOR_SIZE] & (1 << bit_idx));
-	fsbuf[byte_idx % SECTOR_SIZE] &= ~(1 << bit_idx);
-	WR_SECT_SCHED(pin->i_dev, 2, fsbuf);	//modified by xw, 18/12/27
-
-	/**************************/
-	/* free the bits in s-map */
-	/**************************/
-	/*
-	 *           bit_idx: bit idx in the entire i-map
-	 *     ... ____|____
-	 *                  \        .-- byte_cnt: how many bytes between
-	 *                   \      |              the first and last byte
-	 *        +-+-+-+-+-+-+-+-+ V +-+-+-+-+-+-+-+-+
-	 *    ... | | | | | |*|*|*|...|*|*|*|*| | | | |
-	 *        +-+-+-+-+-+-+-+-+   +-+-+-+-+-+-+-+-+
-	 *         0 1 2 3 4 5 6 7     0 1 2 3 4 5 6 7
-	 *  ...__/
-	 *      byte_idx: byte idx in the entire i-map
-	 */
-	bit_idx  = pin->i_start_sect - sb->n_1st_sect + 1;
-	byte_idx = bit_idx / 8;
-	int bits_left = pin->i_nr_sects;
-	int byte_cnt = (bits_left - (8 - (bit_idx % 8))) / 8;
-
-	/* current sector nr. */
-	int s = 2  /* 2: bootsect + superblk */
-		+ sb->nr_imap_sects + byte_idx / SECTOR_SIZE;
-
-	RD_SECT_SCHED(pin->i_dev, s, fsbuf);		//modified by xw, 18/12/27
-
-	int i;
-	/* clear the first byte */
-	for (i = bit_idx % 8; (i < 8) && bits_left; i++,bits_left--) {
-		// assert((fsbuf[byte_idx % SECTOR_SIZE] >> i & 1) == 1);
-		fsbuf[byte_idx % SECTOR_SIZE] &= ~(1 << i);
-	}
-
-	/* clear bytes from the second byte to the second to last */
-	int k;
-	i = (byte_idx % SECTOR_SIZE) + 1;	/* the second byte */
-	for (k = 0; k < byte_cnt; k++,i++,bits_left-=8) {
-		if (i == SECTOR_SIZE) {
-			i = 0;
-			WR_SECT_SCHED(pin->i_dev, s, fsbuf);		//modified by xw, 18/12/27
-			RD_SECT_SCHED(pin->i_dev, ++s, fsbuf);		//modified by xw, 18/12/27
-		}
-		// assert(fsbuf[i] == 0xFF);
-		fsbuf[i] = 0;
-	}
-
-	/* clear the last byte */
-	if (i == SECTOR_SIZE) {
-		i = 0;
-		WR_SECT_SCHED(pin->i_dev, s, fsbuf);			//modified by xw, 18/12/27
-		RD_SECT_SCHED(pin->i_dev, ++s, fsbuf);			//modified by xw, 18/12/27
-	}
-	// assert((fsbuf[i] & mask) == mask);
-	fsbuf[i] &= (~0) << bits_left;
-	WR_SECT_SCHED(pin->i_dev, s, fsbuf);				//modified by xw, 18/12/27
-
-	/***************************/
-	/* clear the i-node itself */
-	/***************************/
-	pin->i_mode = 0;
-	pin->i_size = 0;
-	pin->i_start_sect = 0;
-	pin->i_nr_sects = 0;
-	sync_inode(pin);
-	/* release slot in inode_table[] */
-	put_inode(pin);
-
-	/************************************************/
+void release_dir_entry(struct inode *dir_inode, char *fsbuf, int inode_nr) {
+    /************************************************/
 	/* set the inode-nr to 0 in the directory entry */
 	/************************************************/
+    int i = 0;
 	int dir_blk0_nr = dir_inode->i_start_sect;
 	int nr_dir_blks = (dir_inode->i_size + SECTOR_SIZE) / SECTOR_SIZE;
 	int nr_dir_entries =
@@ -1503,6 +1377,152 @@ static int do_unlink(MESSAGE *fs_msg)
 		dir_inode->i_size = dir_size;
 		sync_inode(dir_inode);
 	}
+}
+
+void release_imap_bit(struct inode *pin, char *fsbuf) {
+    /*************************/
+	/* free the bit in i-map */
+	/*************************/
+    int inode_nr = pin->i_num;
+	int byte_idx = inode_nr / 8;
+	int bit_idx = inode_nr % 8;
+	// assert(byte_idx < SECTOR_SIZE);	/* we have only one i-map sector */
+	/* read sector 2 (skip bootsect and superblk): */
+	RD_SECT_SCHED(pin->i_dev, 2, fsbuf);		//modified by xw, 18/12/27
+	// assert(fsbuf[byte_idx % SECTOR_SIZE] & (1 << bit_idx));
+	fsbuf[byte_idx % SECTOR_SIZE] &= ~(1 << bit_idx);
+	WR_SECT_SCHED(pin->i_dev, 2, fsbuf);	//modified by xw, 18/12/27
+
+	/**************************/
+	/* free the bits in s-map */
+	/**************************/
+	/*
+	 *           bit_idx: bit idx in the entire i-map
+	 *     ... ____|____
+	 *                  \        .-- byte_cnt: how many bytes between
+	 *                   \      |              the first and last byte
+	 *        +-+-+-+-+-+-+-+-+ V +-+-+-+-+-+-+-+-+
+	 *    ... | | | | | |*|*|*|...|*|*|*|*| | | | |
+	 *        +-+-+-+-+-+-+-+-+   +-+-+-+-+-+-+-+-+
+	 *         0 1 2 3 4 5 6 7     0 1 2 3 4 5 6 7
+	 *  ...__/
+	 *      byte_idx: byte idx in the entire i-map
+	 */
+    struct super_block * sb = get_super_block(pin->i_dev);
+	bit_idx  = pin->i_start_sect - sb->n_1st_sect + 1;
+	byte_idx = bit_idx / 8;
+	int bits_left = pin->i_nr_sects;
+	int byte_cnt = (bits_left - (8 - (bit_idx % 8))) / 8;
+
+	/* current sector nr. */
+	int s = 2  /* 2: bootsect + superblk */
+		+ sb->nr_imap_sects + byte_idx / SECTOR_SIZE;
+
+	RD_SECT_SCHED(pin->i_dev, s, fsbuf);		//modified by xw, 18/12/27
+
+	int i;
+	/* clear the first byte */
+	for (i = bit_idx % 8; (i < 8) && bits_left; i++,bits_left--) {
+		// assert((fsbuf[byte_idx % SECTOR_SIZE] >> i & 1) == 1);
+		fsbuf[byte_idx % SECTOR_SIZE] &= ~(1 << i);
+	}
+
+	/* clear bytes from the second byte to the second to last */
+	int k;
+	i = (byte_idx % SECTOR_SIZE) + 1;	/* the second byte */
+	for (k = 0; k < byte_cnt; k++,i++,bits_left-=8) {
+		if (i == SECTOR_SIZE) {
+			i = 0;
+			WR_SECT_SCHED(pin->i_dev, s, fsbuf);		//modified by xw, 18/12/27
+			RD_SECT_SCHED(pin->i_dev, ++s, fsbuf);		//modified by xw, 18/12/27
+		}
+		// assert(fsbuf[i] == 0xFF);
+		fsbuf[i] = 0;
+	}
+
+	/* clear the last byte */
+	if (i == SECTOR_SIZE) {
+		i = 0;
+		WR_SECT_SCHED(pin->i_dev, s, fsbuf);			//modified by xw, 18/12/27
+		RD_SECT_SCHED(pin->i_dev, ++s, fsbuf);			//modified by xw, 18/12/27
+	}
+	// assert((fsbuf[i] & mask) == mask);
+	fsbuf[i] &= (~0) << bits_left;
+	WR_SECT_SCHED(pin->i_dev, s, fsbuf);				//modified by xw, 18/12/27
+}
+
+/// zcr copied from the ch9/h/fs/link.c and modified it
+/*****************************************************************************
+ *                                do_unlink
+ *****************************************************************************/
+/**
+ * Remove a file.
+ *
+ * @note We clear the i-node in inode_array[] although it is not really needed.
+ *       We don't clear the data bytes so the file is recoverable.
+ * 
+ * @return On success, zero is returned.  On error, -1 is returned.
+ *****************************************************************************/
+static int do_unlink(MESSAGE *fs_msg)
+{
+	char pathname[MAX_PATH];
+
+	/* get parameters from the message */
+	int name_len = fs_msg->NAME_LEN;	/* length of filename */
+	int src = fs_msg->source;	/* caller proc nr. */
+	// assert(name_len < MAX_PATH);
+	memcpy((void*)va2la(proc2pid(p_proc_current), pathname),
+		  (void*)va2la(src, fs_msg->PATHNAME),
+		  name_len);
+	pathname[name_len] = 0;
+
+	if (strcmp(pathname , "/") == 0) {
+		kprintf("FS:do_unlink():: cannot unlink the root\n");
+		return -1;
+	}
+
+	int inode_nr = search_file(pathname);
+	if (inode_nr == INVALID_INODE) {	/* file not found */
+		kprintf("FS::do_unlink():: search_file() returns invalid inode: %s\n", pathname);
+		return -1;
+	}
+
+	char filename[MAX_PATH];
+	struct inode * dir_inode;
+	if (strip_path(filename, pathname, &dir_inode) != 0)
+		return -1;
+
+	struct inode * pin = get_inode_sched(dir_inode->i_dev, inode_nr);	//modified by xw, 18/8/28
+
+    if (pin->i_cnt > 0) {	/* the file was opened */
+		kprintf("cannot remove file %s, because pin->i_cnt is %d\n", pathname, pin->i_cnt);
+		return -1;
+	}
+
+    if (pin->i_mode == I_NAMED_PIPE) {
+        pipe_info_release(pin->i_pipe);
+	} else if (pin->i_mode != I_REGULAR) { /* can only remove regular files */
+		kprintf("cannot remove file %s, because it is not a regular file.\n", pathname);
+		return -1;
+	}
+
+
+	/***************************/
+	/* clear the i-node itself */
+	/***************************/
+	pin->i_mode = 0;
+	pin->i_size = 0;
+	pin->i_start_sect = 0;
+	pin->i_nr_sects = 0;
+	sync_inode(pin);
+	/* release slot in inode_table[] */
+	put_inode(pin);
+    
+    char fsbuf[SECTOR_SIZE];	//local array, to substitute global fsbuf. added by xw, 18/12/27
+
+    release_imap_bit(pin, fsbuf);
+
+    release_dir_entry(dir_inode, fsbuf, inode_nr);
 
 	return 0;
 }

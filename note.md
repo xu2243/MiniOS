@@ -215,3 +215,14 @@ int do_vopen(const char *path, int flags) {
 
 
 
+bug here
+
+```c
+// fs.c/do_unlink(MESSAGE *fs_msg)
+// mix up the i_link and i_count
+if (pin->i_cnt > 1) {	/* the file was opened */
+    kprintf("cannot remove file %s, because pin->i_cnt is %d\n", pathname, pin->i_cnt);
+    return -1;
+}
+```
+

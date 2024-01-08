@@ -89,10 +89,10 @@ void init_fileop_table()
     // table[3] for pipefifo vfs
     // f_op_table[3].create = mkfifo;
     f_op_table[2].open = real_open; 
-    f_op_table[3].close = pipe_release;
+    f_op_table[3].close = pipe_close;
     f_op_table[3].write = pipe_write;
     f_op_table[3].read = pipe_read;
-    f_op_table[3].unlink = pipe_unlink;
+    f_op_table[3].unlink = real_unlink;
 
 }
 

@@ -9,6 +9,7 @@
 
 #include "fat32.h"
 #include "pipe.h"
+#include "fs.h"
 
 /**
  * @struct dev_drv_map fs.h "include/sys/fs.h"
@@ -62,6 +63,7 @@ struct super_block {
  */
 //#define	SUPER_BLOCK_SIZE	56
 #define	SUPER_BLOCK_SIZE	64		//modified by mingxuan 2020-10-30
+#define	MAX_FILENAME_LEN	12
 
 /**
  * @struct inode

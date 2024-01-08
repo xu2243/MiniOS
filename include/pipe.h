@@ -3,6 +3,7 @@
 
 #include "list.h"
 #include "proc.h"
+#include "fs.h"
 
 #define PIPE_BUF_PAGE_NUM   1
 #define KB (unsigned)(1024)
@@ -14,7 +15,7 @@
 typedef struct wait_queue_head{
     struct list_head wait_queue;
     PROCESS *proc;
-}wait_queue_head_t;
+} wait_queue_head_t;
 
 
 /**
@@ -72,8 +73,9 @@ int sys_pipe(void *uesp);
 int sys_mkfifo(void *uesp);
 int pipe_read(int fd, void *buf, int count);
 int pipe_write(int fd, const void *buf, int count);
-int pipe_release(int fd);
-int pipe_unlink(const char *path);
+int pipe_close(int fd);
+int pipe_info_release(struct pipe_inode_info *pipe_info);
+// int fifo_unlink(const char *path);
 
 
 #endif

@@ -8,6 +8,8 @@
 #ifndef	FS_H
 #define	FS_H
 
+#include "fs_misc.h"
+
 /* APIs of file operation */
 #define	O_CREAT		1
 #define	O_RDWR		2
@@ -33,6 +35,13 @@ int real_lseek(int fd, int offset, int whence);
 void read_super_block(int dev);
 struct super_block* get_super_block(int dev);
 int get_fs_dev(int drive, int fs_type);
+void sync_inode(struct inode *p);
+void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename);
+int alloc_imap_bit(int dev);
+int alloc_smap_bit(int dev, int nr_sects_to_alloc);
+int strip_path(char * filename, const char * pathname, struct inode** ppinode);
+struct inode * get_inode(int dev, int num);
+void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename);
 int sys_ls();
 
 #endif /* FS_H */
