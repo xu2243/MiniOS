@@ -40,6 +40,7 @@ _NR_deletedir   	equ 27 ;    //added by mingxuan 2019-5-17
 _NR_pipe        equ 28 ;    //added by xuxinping 2023-12-16
 _NR_mkfifo      equ 29
 _NR_ls          equ 30
+_NR_dup2         equ 31
 
 INT_VECTOR_SYS_CALL	equ 0x90
 
@@ -77,6 +78,7 @@ global  deletedir	;		//added by mingxuan 2019-5-17
 global  pipe        ;       //added by xuxinping 2023-12-16
 global  mkfifo
 global  ls
+global  dup2
 
 bits 32
 [section .text]
@@ -385,4 +387,12 @@ mkfifo:
 ls:
 	mov	eax, _NR_ls
 	int	INT_VECTOR_SYS_CALL
+	ret
+
+dup2:
+	push	ebx
+	mov	ebx, esp
+	mov	eax, _NR_dup2
+	int	INT_VECTOR_SYS_CALL
+	pop	ebx
 	ret

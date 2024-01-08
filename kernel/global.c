@@ -22,6 +22,7 @@
 #include "fat32.h" //added by mingxuan 2019-5-17
 #include "vfs.h"   //added by mingxuan 2019-5-17
 #include "pipe.h"   //added by xuxinping 2023-12-27 
+#include "dup2.h"
 
 int kernel_initial;
 int ticks;
@@ -82,6 +83,7 @@ system_call sys_call_table[NR_SYS_CALL] = {
     sys_pipe,       // added by xuxinping 2023-12-16
     sys_mkfifo,
     sys_ls,
+    sys_dup2,
 };
 
 TTY tty_table[NR_CONSOLES];	    // added by mingxuan 2019-5-19
