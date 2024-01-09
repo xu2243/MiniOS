@@ -15,11 +15,14 @@
 #include "fs.h"
 #include "fs_misc.h"
 #include "string.h"
+#include "stdio.h"
 #include "memman.h"
+// #include "list.h"
 
 #define MAX_PIPE_INODE 512
 
 extern struct file_desc f_desc_table[NR_FILE_DESC];
+struct wait_queue_head_t;
 
 void init_queue_head(wait_queue_head_t *wq) {
     INIT_LIST_HEAD(&wq->wait_queue);
@@ -138,14 +141,6 @@ int get_available_proc_fd() {
     return -1;
 }
 
-/* find a free slot in f_desc_table[] */
-int get_available_fd_table() {
-	for (int i = 0; i < NR_FILE_DESC; i++)
-		//modified by mingxuan 2019-5-17
-		if (f_desc_table[i].flag == 0)
-			return i;
-    return -1;
-}
 
 /* mode == READ_MODE or WRITE_MODE */
 int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
@@ -156,12 +151,11 @@ int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
     if (f_table_idx == -1) {
         return -1;
     }
-
     int fd_num = get_available_proc_fd();
     if (fd_num == -1) {
         return -1;
     }
-
+    kprintf("*%d ", fd_num);
     /* f_desc_table doesnt have a mutex, probably take concurrency error */
     struct file_desc *pfd = &f_desc_table[f_table_idx];
     pfd->flag = 1;
@@ -177,7 +171,7 @@ int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
     pfd->fd_mode = mode;
     pfd->dev_index = PIPEFIFO;
     ptr->fd_inode = pipe_inode;
-    pipe_inode->i_pipe->files++;
+    // pipe_inode->i_pipe->files++;
     pipe_inode->i_cnt++;
 
     if (mode == READ_MODE) pipe_inode->i_pipe->r_counter++;
@@ -209,7 +203,7 @@ int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
  *
  * 
  */
-int do_pipe(int pipefd[2]) {
+int do_pipe(int *pipefd) {
     struct inode *pipe_inode = get_pipe_inode(0);
     if (create_pipe(&pipefd[0], pipe_inode, READ_MODE) == -1) {
         /* error handler */
@@ -352,12 +346,12 @@ int pipe_close(int fd) {
     struct inode *pipe_inode = pfile->fd_node.fd_inode;
     struct pipe_inode_info *pipe_info = pfile->fd_node.fd_inode->i_pipe;
 
-    pipe_info->files--;
+    // pipe_info->files--;
     pipe_inode->i_cnt--;
     if (pfile->fd_mode == READ_MODE) pipe_info->r_counter--;
     if (pfile->fd_mode == WRITE_MODE) pipe_info->w_counter--;
 
-    if (pipe_info->files == 0) {
+    if (pipe_inode->i_cnt == 0) {
         pipe_info_release(pipe_inode->i_pipe);
     }
     p_proc_current->task.filp[fd]->fd_node.fd_inode = 0;

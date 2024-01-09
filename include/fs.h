@@ -8,7 +8,6 @@
 #ifndef	FS_H
 #define	FS_H
 
-#include "fs_misc.h"
 
 /* APIs of file operation */
 #define	O_CREAT		1
@@ -31,6 +30,8 @@ int real_write(int fd, const void *buf, int count);
 int real_unlink(const char *pathname);
 int real_lseek(int fd, int offset, int whence);
 
+struct inode;
+
 //added by mingxuan 2020-10-30
 void read_super_block(int dev);
 struct super_block* get_super_block(int dev);
@@ -42,6 +43,7 @@ int alloc_smap_bit(int dev, int nr_sects_to_alloc);
 int strip_path(char * filename, const char * pathname, struct inode** ppinode);
 struct inode * get_inode(int dev, int num);
 void new_dir_entry(struct inode *dir_inode,int inode_nr,char *filename);
+int get_available_fd_table();
 int sys_ls();
 
 #endif /* FS_H */

@@ -87,6 +87,15 @@ int get_fs_dev(int drive, int fs_type)
 	return 0;
 }
 
+
+/* find a free slot in f_desc_table[] */
+int get_available_fd_table() {
+	for (int i = 0; i < NR_FILE_DESC; i++)
+		if (f_desc_table[i].flag == 0)
+			return i;
+    return -1;
+}
+
 /// zcr added
 void init_fs() 
 {
@@ -429,11 +438,7 @@ static int do_open(MESSAGE *fs_msg)
 
 	assert(0 <= fd && fd < NR_FILES);
 
-	/* find a free slot in f_desc_table[] */
-	for (i = 0; i < NR_FILE_DESC; i++)
-		//modified by mingxuan 2019-5-17
-		if (f_desc_table[i].flag == 0)
-			break;
+	i = get_available_fd_table();
 	
 	assert(i < NR_FILE_DESC);
 

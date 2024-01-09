@@ -9,10 +9,15 @@
 #include "proc.h"
 #include "global.h"
 #include "proto.h"
+#include "vfs.h"
+#include "fs_misc.h"
+#include "stdio.h"
+
 
 static int fork_mem_cpy(u32 ppid,u32 pid);
 static int fork_pcb_cpy(PROCESS* p_child);
 static int fork_update_info(PROCESS* p_child);
+static int fork_fd_cpy(struct file_desc **filp);
 
 
 /**********************************************************
@@ -44,7 +49,10 @@ int sys_fork()
 		
 		/**************更新进程树标识info信息************************/
 		fork_update_info(p_child);
-	
+
+        /*****************fork fd copy*************************/
+        fork_fd_cpy(p_child->task.filp);
+
 		/************修改子进程的名字***************/		
 		strcpy(p_child->task.p_name,"fork");	// 所有的子进程都叫fork
 		
@@ -64,6 +72,35 @@ int sys_fork()
 		p_child->task.stat = READY;
 	}
 	return p_child->task.pid;	
+}
+
+extern struct file_desc *f_desc_table[64];
+struct inode;
+struct pipe_inode_info;
+
+static int fork_fd_cpy(struct file_desc **filp) {
+    int src = proc2pid(p_proc_current);
+    for (int i = 0; i < NR_FILES; i++) {
+        if (filp[i]->flag == 0) continue;
+        kprintf("$%d ", i);
+        int fd_nr = get_available_fd_table();
+        // memcpy(&f_desc_table[fd_nr], filp[i], sizeof(struct file_desc));
+        memcpy((void *)(&f_desc_table[fd_nr]), (void*)va2la(src, filp[i]), sizeof(struct file_desc));
+        kprintf("[%x %x]", f_desc_table[fd_nr]->fd_node.fd_inode, filp[i]->fd_node.fd_inode);
+        filp[i] = (struct file_desc*)(&f_desc_table[fd_nr]);
+        filp[i]->fd_node.fd_inode->i_cnt++;
+        if (filp[i]->dev_index == PIPEFIFO) {
+            if (filp[i]->fd_mode == WRITE_MODE)
+                filp[i]->fd_node.fd_inode->i_pipe->w_counter++;
+            else if(filp[i]->fd_mode == READ_MODE)
+                filp[i]->fd_node.fd_inode->i_pipe->r_counter++;
+            else {
+                kprintf("bad mode! ");
+                return -1;
+            }
+        }
+    } 
+    return 0;
 }
 
 
