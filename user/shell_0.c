@@ -82,29 +82,29 @@ int main(int arg, char *argv[])
 
           int pipefd[2];
 
-          // if(pipe(pipefd) == -1){
-          //   printf("pipe failed\n");
-          //   continue ;
-          // }
+          if(pipe(pipefd) == -1){
+            printf("pipe failed\n");
+            continue ;
+          }
 
           int cpid = fork();
 
           if (cpid > 0) {
             printf("father, son:%d\n", cpid);
-            // close(pipefd[0]);
-            // if (dup2(pipefd[1], STD_OUT) == -1)
-            //   printf("dup2 failed\n");
+            close(pipefd[0]);
+            if (dup2(pipefd[1], STD_OUT) == -1)
+              printf("dup2 failed\n");
             get_filename(eof, buf, 1);
             exec_eof(eof);
             // printf("error1\n");
           }
           else if (cpid == 0) {
             printf("son");
-            // close(pipefd[1]);
-            // if (dup2(pipefd[0], STD_IN) == -1)
-            //   printf("dup2 failed\n");
-            // get_filename(eof, buf, 2);
-            // exec_eof(eof);
+            close(pipefd[1]);
+            if (dup2(pipefd[0], STD_IN) == -1)
+              printf("dup2 failed\n");
+            get_filename(eof, buf, 2);
+            exec_eof(eof);
             // printf("error2\n");
             return 0;
           }
