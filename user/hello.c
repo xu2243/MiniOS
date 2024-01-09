@@ -1,7 +1,15 @@
+#include "tty.h"
+#include "proto.h"
 #include "stdio.h"
 
-int main(int arg, char *argv[])
+int main()
 {
-    printf("Hello world!\n");
-    return 0;
+    int i;
+    for (;;)
+    {
+        printf("Hello world!\n");
+        for (i = 0; i < 10000000; i++)
+            ;
+        yield();
+    }
 }

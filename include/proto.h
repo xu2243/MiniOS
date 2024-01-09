@@ -5,6 +5,12 @@
                                                     Forrest Yu, 2005
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
+#ifndef PROTO_H
+#define PROTO_H
+
+#include "proc.h"
+#include "type.h"
+
 /* klib.asm */
 
 void vga_set_disppos(int new_pos);
@@ -146,3 +152,6 @@ int pipe(int pipefd[2]);
 int mkfifo(int *path);
 int ls();
 int dup2(int oldfd, int newfd);
+
+
+#endif
