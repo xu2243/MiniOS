@@ -6,12 +6,6 @@ int stdin, stdout, stderr;
 
 int main(){
   int i;
-  close(0);
-  close(1);
-  close(2);
-  stdin = open("dev_tty0", O_RDWR);
-	stdout = open("dev_tty0", O_RDWR);
-	stderr = open("dev_tty0", O_RDWR);
 
   printf("in:%d, out:%d, err:%d\n", stdin, stdout, stderr);
   for(;;){

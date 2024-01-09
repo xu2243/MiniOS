@@ -122,7 +122,7 @@ static int fork_mem_cpy(u32 ppid,u32 pid)
 	}	
 	
 	//复制栈，栈不共享，子进程需要申请物理地址，并复制过来(注意栈的复制方向)
-	for(addr_lin = p_proc_current->task.memmap.stack_lin_base - num_4K ; addr_lin >= p_proc_current->task.memmap.stack_lin_limit ; addr_lin-=num_4K )
+	for(addr_lin = p_proc_current->task.memmap.stack_lin_base; addr_lin >= p_proc_current->task.memmap.stack_lin_limit ; addr_lin-=num_4K )
 	{
 		lin_mapping_phy(SharePageBase,0,ppid,PG_P  | PG_USU | PG_RWW,0);//使用前必须清除这个物理页映射
 		lin_mapping_phy(SharePageBase,MAX_UNSIGNED_INT,ppid,PG_P  | PG_USU | PG_RWW,PG_P  | PG_USU | PG_RWW);//利用父进程的共享页申请物理页
