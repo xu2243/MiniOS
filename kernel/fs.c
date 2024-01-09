@@ -1610,6 +1610,8 @@ int do_ls()
             // kprintf("*");
             if (pde->inode_nr != 0) {
                 // Print the filename
+                if (strncmp(pde->name, "dev", 3) == 0 || strncmp(pde->name, "app", 3) == 0) 
+                    continue;
                 kprintf("%s ", pde->name);
             }
 

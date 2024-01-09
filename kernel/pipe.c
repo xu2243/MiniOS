@@ -15,6 +15,7 @@
 #include "fs.h"
 #include "fs_misc.h"
 #include "string.h"
+#include "memman.h"
 
 #define MAX_PIPE_INODE 512
 
@@ -41,7 +42,7 @@ void wait_queue_pop(wait_queue_head_t *wq) {
     if (!list_empty(&wq->wait_queue)) {
         wait_queue_head_t *p = list_first_entry(&wq->wait_queue, wait_queue_head_t, wait_queue);
         list_del(&p->wait_queue);
-        sys_free(p); // 在这里释放内存
+        do_free((u32)p, sizeof(wait_queue_head_t)); // 在这里释放内存
     }
 }
 
@@ -338,16 +339,11 @@ int pipe_write(int fd, const void *buf, int count) {
     return 0;
 }
 
-void __free(unsigned addr, unsigned size) {
-    struct memfree memarg;
-    memarg.addr = (u32)addr; memarg.size = (u32)size;
-    sys_free((void *)&memarg);
-}
 
 int pipe_info_release(struct pipe_inode_info *pipe_info) {
     // struct pipe_inode_info *pipe_info = pipe_inode->i_pipe;
-    __free((unsigned)pipe_info->bufs, pipe_info->ring_size);
-    __free((unsigned)pipe_info, sizeof(struct pipe_inode_info));
+    do_free((unsigned)pipe_info->bufs, pipe_info->ring_size);
+    do_free((unsigned)pipe_info, sizeof(struct pipe_inode_info));
     return 0;
 }
 
