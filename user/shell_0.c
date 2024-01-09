@@ -12,7 +12,7 @@ int stdin, stdout, stderr;
 
 void exec_eof(char* eof){
 	if (exec(eof) != 0)
-    ;
+    printf("exec %s failed\n", eof);
 }
 
 // 复制line里的第idx个文件名到filename中
@@ -38,39 +38,6 @@ void get_filename(char* filename, char* line, int idx){
 	memcpy(filename, line+start, finish-start+1);
   //printf("finish:%d, start:%d\n", finish, start);
 	filename[finish-start+1] = '\0';
-}
-
-void do_pipe_chain(char* line, int pipenum){
-  if(pipenum > 1){
-    //暂不支持1个以上的管道
-    printf("pipe more than 1\n");
-    return ;
-  }
-
-  int pipefd[2];
-
-  if(pipe(pipefd) == -1){
-    printf("pipe failed\n");
-    return ;
-  }
-
-  int cpid = fork();
-  char eof[1024];
-  if (cpid > 0) {
-    close(pipefd[0]);
-    if (dup2(pipefd[1], STD_OUT) == -1)
-      printf("dup2 failed\n");
-    get_filename(eof, line, 0);
-    exec_eof(eof);
-  }
-  else if (cpid == 0) {
-    close(pipefd[1]);
-    if (dup2(pipefd[0], STD_IN) == -1)
-      printf("dup2 failed\n");
-    get_filename(eof, line, 1);
-    exec_eof(eof);
-  }
-
 }
 
 int main(int arg, char *argv[])
@@ -99,7 +66,36 @@ int main(int arg, char *argv[])
         if(pipenum == 0)
           exec_eof(buf);
         else{
-          do_pipe_chain(buf, pipenum);
+          if(pipenum > 1){
+            //暂不支持1个以上的管道
+            printf("pipe more than 1\n");
+            continue ;
+          }
+
+          int pipefd[2];
+
+          if(pipe(pipefd) == -1){
+            printf("pipe failed\n");
+            continue ;
+          }
+
+          int cpid = fork();
+          char eof[1024];
+          if (cpid > 0) {
+            // close(pipefd[0]);
+            // if (dup2(pipefd[1], STD_OUT) == -1)
+            //   printf("dup2 failed\n");
+            get_filename(eof, buf, 0);
+            exec_eof(eof);
+            return 0;
+          }
+          else if (cpid == 0) {
+            // close(pipefd[1]);
+            // if (dup2(pipefd[0], STD_IN) == -1)
+            //   printf("dup2 failed\n");
+            get_filename(eof, buf, 1);
+            exec_eof(eof);
+          }
         }
       }
     }

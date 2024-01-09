@@ -19,6 +19,9 @@
 #ifndef PROC_H
 #define PROC_H
 
+#include "type.h"
+#include "protect.h"
+
 #define INIT_STACK_SIZE 1024 * 8	//new kernel stack is 8kB
 #define P_STACKBASE 0
 #define GSREG 0

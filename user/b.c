@@ -5,9 +5,8 @@
 int main(){
   int i;
   for(;;){
-    printf("Hello world!\n");
+    printf("b");
     for(i=0; i<10000000; i++);
     yield();
   }
-  
 }
