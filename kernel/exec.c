@@ -11,7 +11,7 @@
 #include "elf.h"
 #include "fs.h" //added by mingxuan 2019-5-19
 #include "vfs.h"
-
+#include "stdio.h"
 
 
 static u32 exec_elfcpy(u32 fd,Elf32_Phdr Echo_Phdr,u32 attribute);
@@ -59,7 +59,6 @@ u32 sys_exec(char *path)
 		
 	/*************释放进程内存****************/
 	//目前还没有实现 思路是：数据、代码根据text_info和data_info属性决定释放深度，其余内存段可以完全释放
-	
 	/*************根据elf的program复制文件信息**************/
 	if(-1==exec_load(fd,Echo_Ehdr,Echo_Phdr)) return -1;//使用了const指针传递
 
@@ -76,7 +75,7 @@ u32 sys_exec(char *path)
 	p_proc_current->task.regs.esp=(u32)p_proc_current->task.memmap.stack_lin_base;			//栈地址最高处
 	*((u32*)(p_reg + ESPREG - P_STACKTOP)) = p_proc_current->task.regs.esp;	//added by xw, 17/12/11
 	
-	for( addr_lin=p_proc_current->task.memmap.stack_lin_base ; addr_lin > p_proc_current->task.memmap.stack_lin_limit ; addr_lin-=num_4K )
+	for( addr_lin=p_proc_current->task.memmap.stack_lin_base; addr_lin >= p_proc_current->task.memmap.stack_lin_limit ; addr_lin-=num_4K )
 	{
 		err_temp = lin_mapping_phy(	addr_lin,//线性地址						//add by visual 2016.5.9
 									MAX_UNSIGNED_INT,//物理地址						//edit by visual 2016.5.19
