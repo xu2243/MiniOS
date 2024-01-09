@@ -1,9 +1,6 @@
 #ifndef PIPE_H 
 #define PIPE_H  
-
 #include "list.h"
-#include "proc.h"
-#include "fs.h"
 
 #define PIPE_BUF_PAGE_NUM   1
 #define KB (unsigned)(1024)
@@ -11,6 +8,8 @@
 #define PAGE_SIZE (4 * KB)
 #define READ_MODE   0x1
 #define WRITE_MODE  0x2
+
+struct list_head;
 
 typedef struct wait_queue_head{
     struct list_head wait_queue;
@@ -55,7 +54,8 @@ struct pipe_inode_info {
 	// unsigned int nr_accounted;
 	unsigned int readers;
 	unsigned int writers;
-	unsigned int files;
+	// use inode->cnt instead. files is repeated.
+    // unsigned int files; 
 	unsigned int r_counter;
 	unsigned int w_counter;
 	// bool poll_usage;

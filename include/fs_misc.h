@@ -65,6 +65,8 @@ struct super_block {
 #define	SUPER_BLOCK_SIZE	64		//modified by mingxuan 2020-10-30
 #define	MAX_FILENAME_LEN	12
 
+struct pipe_inode_info;
+
 /**
  * @struct inode
  * @brief  i-node
