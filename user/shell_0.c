@@ -10,10 +10,66 @@
 char eof[1024];
 int stdin, stdout, stderr;
 
+typedef void (*usr_prog)(void);
+
 void exec_eof(char *eof)
 {
     if (exec(eof) != 0)
         printf("exec %s failed\n", eof);
+}
+
+void hello(){
+	printf("Hello world!\n");
+	yield();
+}
+
+void says(){
+	char line[1024];
+	for(;;){
+		gets(line);
+		printf("pipe says:%s\n", line);
+	}
+}
+
+void repeat_r(){
+	char line[1024];
+    for (;;)
+    {
+      printf("%c", getchar());
+    }
+}
+
+void repeat_w(){
+	int i;
+    //确保读进程加入读等待队列
+    yield();
+    for (;;)
+    {
+      printf("repeat");
+    }
+}
+
+void a(){
+	for(;;){
+		printf("pipe chain!\n");
+		yield();
+	}
+}
+
+void b(){
+	char line[1024];
+	for(;;){
+		printf("%s", gets(line));
+		yield();
+	}
+}
+
+void c(){
+	char line[1024];
+	for(;;){
+		printf("%s", gets(line));
+		yield();
+	}
 }
 
 // 复制line里的第idx个文件名到filename中
@@ -64,68 +120,138 @@ void pp(char *buf)
     if (pipenum == 0){
       exec_eof(buf);
     }
-    else if(pipenum == 1){
-        int pipefd[2];
+	else{
+		printf("invalid test!\n");
+	}
 
-        if (pipe(pipefd) == -1)
-        {
-            printf("pipe failed ");
-            return;
-        }
-        else
-        {
-            // printf("pipe good!! ");
-        }
+    // else if(pipenum == 1){
+    //     int pipefd[2];
 
-        int cpid = fork();
+    //     if (pipe(pipefd) == -1)
+    //     {
+    //         printf("pipe failed ");
+    //         return;
+    //     }
+    //     else
+    //     {
+    //         // printf("pipe good!! ");
+    //     }
 
-        printf("[%d, %d]", pipefd[0], pipefd[1]);
+    //     int cpid = fork();
 
-		if (cpid > 0) {
-			printf("father, son:%d\n", cpid);
-			// close(pipefd[0]);
-			// if (dup2(pipefd[1], STD_OUT) == -1)
-			// 	printf("dup2 failed\n");
-			get_filename(eof, buf, 1);
-			exec_eof(eof);
+    //     printf("[%d, %d]", pipefd[0], pipefd[1]);
+
+	// 	if (cpid > 0) {
+	// 		printf("father, son:%d\n", cpid);
+	// 		close(pipefd[0]);
+	// 		if (dup2(pipefd[1], STD_OUT) == -1)
+	// 			printf("dup2 failed\n");
+
+	// 	}
+	// 	else if (cpid == 0) {
+	// 		printf("son\n");
+	// 		close(pipefd[1]);
+	// 		if (dup2(pipefd[0], STD_IN) == -1)
+	// 			printf("dup2 failed\n");
+
+
+    //     }
+    // }else{ //多管道，递归解决
+	// 	int pipefd[2];
+    //     if (pipe(pipefd) == -1){
+    //         printf("pipe failed ");
+    //         return ;
+	// 	}
+	// 	int cpid = fork();
+	// 	if (cpid > 0) {
+    //         printf("father, son:%d\n", cpid);
+    //         close(pipefd[0]);
+    //         if (dup2(pipefd[1], STD_OUT) == -1)
+    //           	printf("dup2 failed\n");
+    //         get_filename(eof, buf, 1);
+    //         exec_eof(eof);
+	// 	}else {
+    //         close(pipefd[1]);
+    //         if (dup2(pipefd[0], STD_IN) == -1)
+    //           	printf("dup2 failed\n");
+	// 		char *newline = buf;
+	// 		//去掉第一个文件名
+	// 		for(; *newline != '|'; newline++);
+	// 		newline++;
+	// 		pp(newline);
+	// 	}
+	// }
+}
+
+void pipe_2(usr_prog p1, usr_prog p2){
+	int pipefd[2];
+	if (pipe(pipefd) == -1){
+		printf("pipe failed ");
+		return ;
+	}
+    int cpid = fork();
+
+	if (cpid > 0) {
+		printf("father, son:%d\n", cpid);
+		close(pipefd[0]);
+		if (dup2(pipefd[1], STD_OUT) == -1)
+			printf("dup2 failed\n");
+		p1();
+	}
+	else if (cpid == 0) {
+		printf("son\n");
+		close(pipefd[1]);
+		if (dup2(pipefd[0], STD_IN) == -1)
+			printf("dup2 failed\n");
+		p2();
+	}
+}
+
+void pipe_3(usr_prog p1, usr_prog p2, usr_prog p3){
+	int pipefd1[2];
+	if (pipe(pipefd1) == -1){
+		printf("pipe failed ");
+		return ;
+	}
+    int cpid1 = fork();
+
+	if (cpid1 > 0) {
+		printf("father, son:%d\n", cpid1);
+		close(pipefd1[0]);
+		if (dup2(pipefd1[1], STD_OUT) == -1)
+			printf("dup2 failed\n");
+		p1();
+	}
+	else if (cpid1 == 0) {
+		printf("son\n");
+		close(pipefd1[1]);
+		if (dup2(pipefd1[0], STD_IN) == -1)
+			printf("dup2 failed\n");
+		
+		int pipefd2[2];
+		if (pipe(pipefd2) == -1){
+			printf("pipe failed ");
+			return ;
 		}
-		else if (cpid == 0) {
+		int cpid2 = fork();
+		if (cpid2 > 0) {
+			printf("father, son:%d\n", cpid2);
+			close(pipefd2[0]);
+			if (dup2(pipefd2[1], STD_OUT) == -1)
+				printf("dup2 failed\n");
+			p2();
+		}
+		else if (cpid2 == 0) {
 			printf("son\n");
-			// close(pipefd[1]);
-			// if (dup2(pipefd[0], STD_IN) == -1)
-			// 	printf("dup2 failed\n");
-			// printf("dup2 !!!!!!\n");
-			get_filename(eof, buf, 2);
-			exec_eof(eof);
-        }
-    }else{ //多管道，递归解决
-		int pipefd[2];
-        if (pipe(pipefd) == -1){
-            printf("pipe failed ");
-            return ;
-		}
-		int cpid = fork();
-		if (cpid > 0) {
-            printf("father, son:%d\n", cpid);
-            close(pipefd[0]);
-            if (dup2(pipefd[1], STD_OUT) == -1)
-              	printf("dup2 failed\n");
-            get_filename(eof, buf, 1);
-            exec_eof(eof);
-		}else {
-            close(pipefd[1]);
-            if (dup2(pipefd[0], STD_IN) == -1)
-              	printf("dup2 failed\n");
-			char *newline = buf;
-			//去掉第一个文件名
-			for(; *newline != '|'; newline++);
-			newline++;
-			pp(newline);
+			close(pipefd2[1]);
+			if (dup2(pipefd2[0], STD_IN) == -1)
+				printf("dup2 failed\n");
+			p3();
 		}
 	}
 }
 
-void run(char* line){
+void run(char* line, int tn){
 	int cpid = fork();
 	if(cpid > 0){
 		printf("wait4 child:%d\n", cpid);
@@ -135,9 +261,23 @@ void run(char* line){
 		close(0);
 		open("dev_tty0", O_RDWR);
 	}else{
-		pp(line);
+		switch(tn){
+		case 0:
+			pp(line);
+			break;
+		case 1:
+			pipe_2(hello, says);
+			break;
+		case 2:
+			pipe_2(repeat_w, repeat_r);
+			break;
+		case 3:
+			pipe_3(a, b, c);
+			break;
+		}
 	}
 }
+
 
 int main(int arg, char *argv[])
 {
@@ -158,13 +298,13 @@ int main(int arg, char *argv[])
             if (strncmp("ls", buf, 2) == 0)
               ls();
             else if (strncmp("t1", buf, 2) == 0) 
-              run("orange/hello.bin | orange/says.bin");
+              run("hello | says", 1);			//测试案例引号里的东西没有实际作用，仅作注释
             else if (strncmp("t2", buf, 2) == 0) 
-              run("orange/repeat_w.bin | orange/repeat_r.bin");
+              run("repeat_w | repeat_r", 2);
             else if (strncmp("t3", buf, 2) == 0) 
-              run("orange/a.bin | orange/b.bin | orange/c.bin");
+              run("a | b | c", 3);
             else
-              run(buf);
+              run(buf, 0);
         }
     }
 }
