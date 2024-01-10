@@ -24,6 +24,7 @@
 #include "pipe.h"   //added by xuxinping 2023-12-27 
 #include "dup2.h"
 #include "wait.h"
+#include "exit.h"
 
 int kernel_initial;
 int ticks;
@@ -86,6 +87,7 @@ system_call sys_call_table[NR_SYS_CALL] = {
     sys_ls,
     sys_dup2,
     sys_wait,
+    sys_exit,
 };
 
 TTY tty_table[NR_CONSOLES];	    // added by mingxuan 2019-5-19

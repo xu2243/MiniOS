@@ -159,6 +159,7 @@ typedef struct s_proc {
 	u32 cr3;						//add by visual 2016.4.5
 
   int exit_code;
+  u32 lock;
 	
 	//added by zcr
 	struct file_desc * filp[NR_FILES];

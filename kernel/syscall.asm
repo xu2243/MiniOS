@@ -42,6 +42,7 @@ _NR_mkfifo      equ 29
 _NR_ls          equ 30
 _NR_dup2         equ 31
 _NR_wait      equ 32
+_NR_exit      equ 33
 
 INT_VECTOR_SYS_CALL	equ 0x90
 
@@ -80,7 +81,8 @@ global  pipe        ;       //added by xuxinping 2023-12-16
 global  mkfifo
 global  ls
 global  dup2
-global  wait
+global  waity
+global  exit
 
 bits 32
 [section .text]
@@ -403,6 +405,14 @@ waity:
   push	ebx
 	mov	ebx, esp
 	mov	eax, _NR_wait
+	int	INT_VECTOR_SYS_CALL
+	pop	ebx
+	ret
+
+exit:
+  push	ebx
+	mov	ebx, esp
+	mov	eax, _NR_exit
 	int	INT_VECTOR_SYS_CALL
 	pop	ebx
 	ret

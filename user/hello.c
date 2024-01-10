@@ -8,8 +8,6 @@ int main()
     for (;;)
     {
         printf("Hello world!\n");
-        for (i = 0; i < 10000000; i++)
-            ;
-        yield();
+        exit(0);
     }
 }

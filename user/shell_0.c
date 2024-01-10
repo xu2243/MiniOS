@@ -60,8 +60,15 @@ void pp(char *buf) {
     }
     // printf("pipen: %d\n", pipenum);
 
-    if (pipenum == 0)
+    if (pipenum == 0){
+      int cpid = fork();
+
+      if(cpid > 0){
+        waity(NULL);
+      }else{
         exec_eof(buf);
+      }
+    }
     else
     {
         if (pipenum > 1)
@@ -87,11 +94,11 @@ void pp(char *buf) {
 
           if (cpid > 0) {
             printf("father, son:%d\n", cpid);
-            close(pipefd[0]);
-            if (dup2(pipefd[1], STD_OUT) == -1)
-              printf("dup2 failed\n");
-            get_filename(eof, buf, 1);
-            exec_eof(eof);
+            // close(pipefd[0]);
+            // if (dup2(pipefd[1], STD_OUT) == -1)
+            //   printf("dup2 failed\n");
+            // get_filename(eof, buf, 1);
+            // exec_eof(eof);
             // printf("error1\n");
           }
           else if (cpid == 0) {

@@ -153,6 +153,7 @@ int mkfifo(int *path);
 int ls();
 int dup2(int oldfd, int newfd);
 int waity(int *wstatus);
+int exit(int status);
 
 
 #endif
