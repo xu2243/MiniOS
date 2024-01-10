@@ -76,7 +76,7 @@
 
 /* system call */
 //#define NR_SYS_CALL     23	//last modified by xw, 18/6/19
-#define NR_SYS_CALL       32    //modified by xxp 2023-12-27, sys_pipe is added 
+#define NR_SYS_CALL       34    //modified by xxp 2023-12-27, sys_pipe is added 
 
 /* TTY */
 //added by mingxuan 2019-5-19

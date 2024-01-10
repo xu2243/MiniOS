@@ -226,3 +226,24 @@ if (pin->i_cnt > 1) {	/* the file was opened */
 }
 ```
 
+```c
+// fork.c:161
+
+	//复制栈，栈不共享，子进程需要申请物理地址，并复制过来(注意栈的复制方向)
+// for(addr_lin = p_proc_current->task.memmap.stack_lin_base - num_4K; addr_lin >= p_proc_current->task.memmap.stack_lin_limit ; addr_lin-=num_4K )
+for(addr_lin = p_proc_current->task.memmap.stack_lin_base; addr_lin >= p_proc_current->task.memmap.stack_lin_limit ; addr_lin-=num_4K )
+{
+  lin_mapping_phy(SharePageBase,0,ppid,PG_P  | PG_USU | PG_RWW,0);//使用前必须清除这个物理页映射
+  lin_mapping_phy(SharePageBase,MAX_UNSIGNED_INT,ppid,PG_P  | PG_USU | PG_RWW,PG_P  | PG_USU | PG_RWW);//利用父进程的共享页申请物理页
+  memcpy((void*)SharePageBase,(void*)(addr_lin&0xFFFFF000),num_4K);//将数据复制到物理页上,注意这个地方是强制一页一页复制的
+  lin_mapping_phy(addr_lin,//线性地址
+          get_page_phy_addr(ppid,SharePageBase),//物理地址，获取共享页的物理地址，填进子进程页表
+          pid,//要挂载的进程的pid，子进程的pid
+          PG_P  | PG_USU | PG_RWW,//页目录属性，一般都为可读写
+          PG_P  | PG_USU | PG_RWW);//页表属性，栈是可读写的		
+}
+
+#define StackLinLimitMAX		HeapLinLimitMAX				//栈的大小： 1G-128M-4K（注意栈的基址和界限方向）
+#define StackLinBase			(ArgLinBase-num_4B)			//=(StackLinLimitMAX+1G-128M-4K-4B)栈的起始地址,放在参数位置之前（注意堆栈的增长方向）
+
+```

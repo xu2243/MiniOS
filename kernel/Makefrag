@@ -33,6 +33,8 @@ KERN_SRCFILES :=kernel/kernel.asm	\
 		kernel/uart.c	\
 		kernel/pipe.c	\
 		kernel/dup2.c \
+		kernel/wait.c \
+		kernel/exit.c \
 
 
 KERN_OBJFILES	:= $(patsubst %.c, $(OBJDIR)/%.o, $(KERN_SRCFILES))

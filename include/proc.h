@@ -61,7 +61,7 @@
 
 //enum proc_stat	{IDLE,READY,WAITING,RUNNING};		//add by visual smile 2016.4.5
 //enum proc_stat	{IDLE,READY,SLEEPING};		//eliminate RUNNING state
-enum proc_stat	{IDLE,READY,SLEEPING,KILLED};	/* add KILLED state. when a process's state is KILLED, the process
+enum proc_stat	{IDLE,READY,SLEEPING,ZOMBIE,KILLED};	/* add KILLED state. when a process's state is KILLED, the process
 												 * won't be scheduled anymore, but all of the resources owned by
 												 * it is not freed yet.
 												 * added by xw, 18/12/19
@@ -157,6 +157,9 @@ typedef struct s_proc {
 	enum proc_stat stat;			//add by visual 2016.4.5
 	
 	u32 cr3;						//add by visual 2016.4.5
+
+  int exit_code;
+  u32 lock;
 	
 	//added by zcr
 	struct file_desc * filp[NR_FILES];
