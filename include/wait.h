@@ -1,7 +1,7 @@
 #ifndef WAIT_H
 #define WAIT_H
 
-#include "proc.h"
+// #include "proc.h"
 
 #define ECHILD 10
 

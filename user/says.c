@@ -9,7 +9,7 @@ int main()
     for (;;)
     {
         // gets(line);
-        printf("pipe says:[%s]\n", line);
+        printf("pipe says:[]");
         yield();
     }
 }

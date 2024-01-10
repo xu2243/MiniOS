@@ -82,7 +82,7 @@ static int fork_fd_cpy(struct file_desc **filp) {
     int src = proc2pid(p_proc_current);
     for (int i = 0; i < NR_FILES; i++) {
         if (filp[i]->flag == 0) continue;
-        // kprintf("$%d ", i);
+        // kprintf("[$%d]", i);
         int fd_nr = get_available_fd_table();
         memcpy(&f_desc_table[fd_nr], filp[i], sizeof(struct file_desc));
         // kprintf("[%x %x]", i, fd_nr);

@@ -13,7 +13,8 @@ int stdin, stdout, stderr;
 void exec_eof(char *eof)
 {
     if (exec(eof) != 0)
-        printf("exec %s failed\n", eof);
+        ;
+        // printf("exec %s failed\n", eof);
 }
 
 // 复制line里的第idx个文件名到filename中
@@ -48,7 +49,7 @@ void get_filename(char *filename, char *line, int idx)
     // printf("finish:%d, start:%d\n", finish, start);
     //  printf("here\n");
     filename[finish - start + 1] = '\0';
-    printf("file:*%s*\n", filename);
+    // printf("file:*%s*\n", filename);
 }
 
 void pp(char *buf)
@@ -59,13 +60,13 @@ void pp(char *buf)
         if (buf[i] == '|')
             pipenum++;
     }
-    // printf("pipen: %d\n", pipenum);
+    // printf("[pipen: %d]", pipenum);
 
     if (pipenum == 0){
-      exec_eof(buf);
+        exec_eof(buf);
     }
     else if(pipenum == 1){
-        int pipefd[2];
+        int pipefd[2] = {0};
 
         if (pipe(pipefd) == -1)
         {
@@ -82,20 +83,34 @@ void pp(char *buf)
         // printf("[%d, %d]", pipefd[0], pipefd[1]);
 
 		if (cpid > 0) {
-			printf("father, son:%d\n", cpid);
+			// printf("father, son:%d", cpid);
 			close(pipefd[0]);
+            // printf("close");
 			if (dup2(pipefd[1], STD_OUT) == -1)
 				printf("dup2 failed\n");
-			get_filename(eof, buf, 1);
-			exec_eof(eof);
+            // printf("fa_stdout_good");
+			// get_filename(eof, buf, 1);
+			// exec_eof(eof);
+            while(1) {
+                printf("hello my son!");
+                yield();
+            }
 		}
 		else if (cpid == 0) {
-			printf("son\n");
 			close(pipefd[1]);
+            // printf("close");
 			if (dup2(pipefd[0], STD_IN) == -1)
-				printf("dup2 failed\n");
-			get_filename(eof, buf, 2);
-			exec_eof(eof);
+				printf("dup2 failed\n\0");
+            // printf("s_out_gd");
+			// get_filename(eof, buf, 2);
+            while(1) {
+                char tmp[128];
+                memset(tmp, 0, 1024);
+                gets(tmp);
+                printf("[from father:%s]\n", tmp);
+                yield();
+            }
+			// exec_eof(eof);
         }
     }else{ //多管道，递归解决
 		int pipefd[2];
@@ -127,7 +142,7 @@ void pp(char *buf)
 void run(char* line){
 	int cpid = fork();
 	if(cpid > 0){
-		printf("wait4 child:%d\n", cpid);
+		// printf("wait4child:%d\n", cpid);
 		int wpid = waity(NULL);
 		printf("child:%d exited!\n", wpid);
 		//神奇的地方在于，如果不写这两行那么stdin不再连接到tty0
@@ -144,7 +159,7 @@ int main(int arg, char *argv[])
     stdout = open("dev_tty0", O_RDWR);
     stderr = open("dev_tty0", O_RDWR);
 
-    printf("in:%d, out:%d, err:%d\n", stdin, stdout, stderr);
+    // printf("in:%d, out:%d, err:%d\n", stdin, stdout, stderr);
 
     char buf[1024];
     int pid;
@@ -157,7 +172,7 @@ int main(int arg, char *argv[])
             if (strncmp("ls", buf, 2) == 0)
               ls();
             else if (strncmp("t", buf, 1) == 0) 
-              run("orange/hello.bin | orange/says.bin");
+              run("orange/hello.bin|orange/says.bin");
             else
               run(buf);
         }

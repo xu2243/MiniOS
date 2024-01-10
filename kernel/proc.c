@@ -12,6 +12,7 @@
 #include "proc.h"
 #include "global.h"
 #include "proto.h"
+#include "stdio.h"
 
 /*======================================================================*
                               schedule
@@ -82,6 +83,7 @@
 void sys_yield()
 {
 	p_proc_current->task.ticks = 0;	/* modified by xw, 18/4/27 */
+    // kprintf("[y:%d]", proc2pid(p_proc_current));
 	sched();	//Modified by xw, 18/4/19
 }
 

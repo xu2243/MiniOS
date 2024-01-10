@@ -10,8 +10,8 @@ USER_SRCS :=	user/ptTest.c		\
 				user/shell_0.c		\
 				user/hello.c  		\
 				user/says.c   		\
-				user/a.c      		\
-				user/b.c      		\
+				# user/a.c      		\
+				# user/b.c      		\
 
 USER_BINS	:= $(patsubst %.c, $(OBJDIR)/%.bin, $(USER_SRCS))
 USER_BASENAMES	:= $(patsubst $(OBJDIR)/user/%, %, $(USER_BINS))

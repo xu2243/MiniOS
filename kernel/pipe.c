@@ -28,17 +28,22 @@ void init_queue_head(wait_queue_head_t *wq) {
     INIT_LIST_HEAD(&wq->wait_queue);
 }
 
-void wait_queue_push(wait_queue_head_t *wq, PROCESS *proc) {
-    wait_queue_head_t *p = (wait_queue_head_t *)sys_kmalloc(sizeof(wait_queue_head_t));
-    list_add_tail(&p->wait_queue, &wq->wait_queue);
-}
-
 PROCESS *wait_queue_head(wait_queue_head_t *wq) {
     if (!list_empty(&wq->wait_queue)) {
         wait_queue_head_t *p = list_first_entry(&wq->wait_queue, wait_queue_head_t, wait_queue);
+        // kprintf("[%x]", p);
         return p->proc;
     }
+    // kprintf("listempty!");
     return NULL;
+}
+
+void wait_queue_push(wait_queue_head_t *wq, PROCESS *proc) {
+    wait_queue_head_t *p = (wait_queue_head_t *)K_PHY2LIN(sys_kmalloc(sizeof(wait_queue_head_t)));
+    // kprintf("[%x]", p);
+    p->proc = proc;
+    list_add_tail(&p->wait_queue, &wq->wait_queue);
+    // kprintf("[%d %x]", p->proc->task.pid, wait_queue_head(wq));
 }
 
 void wait_queue_pop(wait_queue_head_t *wq) {
@@ -207,12 +212,16 @@ int do_pipe(int *pipefd) {
     struct inode *pipe_inode = get_pipe_inode(0);
     if (create_pipe(&pipefd[0], pipe_inode, READ_MODE) == -1) {
         /* error handler */
+        kprintf("pipe failed!");
         return -1;
     }
     if (create_pipe(&pipefd[1], pipe_inode, WRITE_MODE) == -1) {
         /* error handler */
+        kprintf("pipe failed!");
         return -1;
     }
+
+    // kprintf("[pipe ready]");
     
     return 0;
 }
@@ -221,7 +230,7 @@ int pipe_read(int fd, void *buf, int count) {
     struct file_desc *file = p_proc_current->task.filp[fd];
     struct pipe_inode_info *pipe_info = file->fd_node.fd_inode->i_pipe;
 
-    kprintf("*pr");
+    // kprintf("[%d*pr]", p_proc_current->task.pid);
     
     // Check if the file descriptor is valid
     if (file == NULL || file->flag == 0 || file->fd_mode != READ_MODE || count < 0) {
@@ -230,9 +239,14 @@ int pipe_read(int fd, void *buf, int count) {
     }
 
     wait_queue_push(&pipe_info->rd_wait, p_proc_current);
+    // kprintf("[queue:%d]", wait_queue_head(&pipe_info->rd_wait)->task.pid);
+    if (wait_queue_head(&pipe_info->rd_wait) == NULL) {
+        // kprintf("[badqueue!]");
+    }
     pipe_info->readers++;
 
     while (pipe_info->mutex || wait_queue_head(&pipe_info->rd_wait) != p_proc_current) {
+        // kprintf("[Rseched, mtx=%d]", pipe_info->mutex);
         p_proc_current->task.stat = SLEEPING;
 		sched();
     }
@@ -243,6 +257,7 @@ int pipe_read(int fd, void *buf, int count) {
     unsigned int ret = 0;
 
     while (1) {
+        // kprintf("*pw");
         if (ret == count) {
             wait_queue_pop(&pipe_info->rd_wait);
             wait_queue_head(&file->fd_node.fd_inode->i_pipe->wr_wait)->task.stat = READY;
@@ -261,6 +276,7 @@ int pipe_read(int fd, void *buf, int count) {
                 pipe_info->mutex = 0;
                 return ret;
             }
+            // kprintf("**************%d***************\n", wait_queue_head(&file->fd_node.fd_inode->i_pipe->wr_wait)->task.pid);
             wait_queue_head(&file->fd_node.fd_inode->i_pipe->wr_wait)->task.stat = READY;
             pipe_info->mutex = 0;
             p_proc_current->task.stat = SLEEPING;
@@ -281,7 +297,7 @@ int pipe_write(int fd, const void *buf, int count) {
     struct file_desc *file = p_proc_current->task.filp[fd];
     struct pipe_inode_info *pipe_info = file->fd_node.fd_inode->i_pipe;
 
-    kprintf("*pw");
+    // kprintf("[%d*pw]", p_proc_current->task.pid);
     
     // Check if the file descriptor is valid
     if (file == NULL || file->flag == 0 || file->fd_mode != WRITE_MODE || count < 0) {
@@ -290,9 +306,11 @@ int pipe_write(int fd, const void *buf, int count) {
     }
 
     wait_queue_push(&pipe_info->wr_wait, p_proc_current);
+    // kprintf("[%d]", wait_queue_head(&pipe_info->wr_wait)->task.pid);
     pipe_info->writers++;
 
     while (pipe_info->mutex || wait_queue_head(&pipe_info->wr_wait) != p_proc_current) {
+        // kprintf("[Wseched, mtx=%d]", pipe_info->mutex);
         p_proc_current->task.stat = SLEEPING;
 		sched();
     }

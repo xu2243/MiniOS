@@ -303,7 +303,7 @@ int do_vopen(const char *path, int flags) {
     {
         p_proc_current -> task.filp[fd] -> dev_index = index;
     } else {
-        kprintf("          error!\n");
+        kprintf("          do_vopen error!\n");
     }
                    
     return fd;    
@@ -337,7 +337,7 @@ int do_vwrite(int fd, const char *buf, int count) {
             fsbuf++;
         }
         //bytes = device_table[index].op->write(fd,s,iobytes);
-        kprintf("write!");
+        // kprintf("write!");
         bytes = vfs_table[index].op->write(fd,s,iobytes);   //modified by mingxuan 2020-10-18
         if(bytes != iobytes)
         {

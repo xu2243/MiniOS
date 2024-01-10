@@ -7,7 +7,7 @@ int main()
     int i;
     for (;;)
     {
-        printf("Hello world!\n");
+        printf("Hello world!");
         yield();
     }
 }

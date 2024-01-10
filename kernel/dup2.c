@@ -14,9 +14,9 @@
 
 static int do_dup2(int oldfd, int newfd) {
     if (p_proc_current->task.filp[newfd]->flag == 1) {
-        // kprintf("newfd:%d", newfd);
-        close(newfd);
-        // kprintf("newfd close");
+        // kprintf("[newfd:%d]", newfd);
+        // close(newfd);
+        // kprintf("[newfd close]");
     }
     p_proc_current->task.filp[newfd] = p_proc_current->task.filp[oldfd];
     return 0;

@@ -45,7 +45,7 @@ u32 sys_exec(char *path)
 
 	if(fd==-1)
 	{
-		//printf("sys_exec open error!\n");	//deleted by mingxuan 2019-5-23
+		kprintf("sys_exec open error!\n");	//deleted by mingxuan 2019-5-23
 		return -1; 
 	}
 	// u32 fd = fake_open(path,"r");	//modified by xw, 18/5/30 
@@ -168,6 +168,7 @@ static u32 exec_load(u32 fd,const Elf32_Ehdr* Echo_Ehdr,const Elf32_Phdr Echo_Ph
 
 	// (This is bullshit)我们还不能确定elf中一共能有几个program，但就目前我们查看过的elf文件中，只出现过两中program，一种.text（R-E）和一种.data（RW-）
 	// 上面一句话导致了去年出现了诡异的错误，暂时只能说简单修复了一下，但是这个系统的权限就很混乱
+    // (This is bullshit  -2024/1/11) 
 	for( ph_num=0; ph_num<Echo_Ehdr->e_phnum ; ph_num++ )
 	{
 		if( 0==Echo_Phdr[ph_num].p_memsz )

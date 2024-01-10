@@ -443,6 +443,7 @@ static int do_open(MESSAGE *fs_msg)
 	assert(i < NR_FILE_DESC);
 
 	int inode_nr = search_file(pathname);
+    kprintf("{%d}", inode_nr);
 	struct inode * pin = 0;
 	if (flags & O_CREAT) {
 		if (inode_nr) {
@@ -492,6 +493,7 @@ static int do_open(MESSAGE *fs_msg)
 		// }
 	}
 	else {
+        kprintf("           no inode");
 		return -1;
 	}
 
@@ -597,11 +599,11 @@ static int search_file(char * path)
 	int dir_blk0_nr = dir_inode->i_start_sect;
 	int nr_dir_blks = (dir_inode->i_size + SECTOR_SIZE - 1) / SECTOR_SIZE;
 	int nr_dir_entries =
-	  dir_inode->i_size / DIR_ENTRY_SIZE; /**
-					       * including unused slots
-					       * (the file has been deleted
-					       * but the slot is still there)
-					       */
+    dir_inode->i_size / DIR_ENTRY_SIZE; /**
+                        * including unused slots
+                        * (the file has been deleted
+                        * but the slot is still there)
+                        */
 	int m = 0;
 	struct dir_entry * pde;
 	char fsbuf[SECTOR_SIZE];	//local array, to substitute global fsbuf. added by xw, 18/12/27
@@ -610,6 +612,8 @@ static int search_file(char * path)
 		RD_SECT(dir_inode->i_dev, dir_blk0_nr + i, fsbuf);	//modified by mingxuan 2019-5-20
 		pde = (struct dir_entry *)fsbuf;
 		for (j = 0; j < SECTOR_SIZE / DIR_ENTRY_SIZE; j++,pde++) {
+            if (pde->inode_nr == 0) continue;
+            if(((filename[0] == 's' && filename[1] == 'a') || filename[0] == 'h') && pde->name[0] != 'd') kprintf("[%c %s]", filename[0], pde->name);
 			if (memcmp(filename, pde->name, MAX_FILENAME_LEN) == 0)
 				return pde->inode_nr;
 			if (++m > nr_dir_entries)
@@ -771,6 +775,8 @@ struct inode * get_inode(int dev, int num)
 			if ((p->i_num == num)) {
 				/* this is the inode we want */
 				p->i_cnt++;
+                if (!p)
+		            panic("the inode table is full");
 				return p;
 			}
 		}
