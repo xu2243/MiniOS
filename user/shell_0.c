@@ -61,28 +61,9 @@ void pp(char *buf) {
     // printf("pipen: %d\n", pipenum);
 
     if (pipenum == 0){
-      int cpid = fork();
-
-      if(cpid > 0){
-        printf("wait4 child:%d\n", cpid);
-        int wpid = waity(NULL);
-        printf("child:%d exited!\n", wpid);
-        //神奇的地方在于，如果不写这两行那么stdin不再连接到tty0
-        close(0);
-        open("dev_tty0", O_RDWR);
-      }else{
-        exec_eof(buf);
-      }
+      exec_eof(buf);
     }
-    else
-    {
-        if (pipenum > 1)
-        {
-            // 暂不支持1个以上的管道
-            printf("pipe more than 1\n");
-            return ;
-        }
-
+    else if(pipenum == 1){
         int pipefd[2];
 
         if (pipe(pipefd) == -1)
@@ -97,26 +78,61 @@ void pp(char *buf) {
 
         printf("pid:%d ", cpid);
 
-          if (cpid > 0) {
+		if (cpid > 0) {
+			printf("father, son:%d\n", cpid);
+			close(pipefd[0]);
+			if (dup2(pipefd[1], STD_OUT) == -1)
+				printf("dup2 failed\n");
+			get_filename(eof, buf, 1);
+			exec_eof(eof);
+		}
+		else if (cpid == 0) {
+			printf("son\n");
+			close(pipefd[1]);
+			if (dup2(pipefd[0], STD_IN) == -1)
+				printf("dup2 failed\n");
+			get_filename(eof, buf, 2);
+			exec_eof(eof);
+        }
+    }else{ //多管道，递归解决
+		int pipefd[2];
+        if (pipe(pipefd) == -1){
+            printf("pipe failed ");
+            return ;
+		}
+		int cpid = fork();
+		if (cpid > 0) {
             printf("father, son:%d\n", cpid);
-            // close(pipefd[0]);
-            // if (dup2(pipefd[1], STD_OUT) == -1)
-            //   printf("dup2 failed\n");
-            // get_filename(eof, buf, 1);
-            // exec_eof(eof);
-            // printf("error1\n");
-          }
-          else if (cpid == 0) {
-            printf("son");
+            close(pipefd[0]);
+            if (dup2(pipefd[1], STD_OUT) == -1)
+              	printf("dup2 failed\n");
+            get_filename(eof, buf, 1);
+            exec_eof(eof);
+		}else {
             close(pipefd[1]);
             if (dup2(pipefd[0], STD_IN) == -1)
-              printf("dup2 failed\n");
-            get_filename(eof, buf, 2);
-            exec_eof(eof);
-            // printf("error2\n");
-            return ;
-        }
-    }
+              	printf("dup2 failed\n");
+			char *newline = buf;
+			//去掉第一个文件名
+			for(; *newline != '|'; newline++);
+			newline++;
+			pp(newline);
+		}
+	}
+}
+
+void run(char* line){
+	int cpid = fork();
+	if(cpid > 0){
+		printf("wait4 child:%d\n", cpid);
+		int wpid = waity(NULL);
+		printf("child:%d exited!\n", wpid);
+		//神奇的地方在于，如果不写这两行那么stdin不再连接到tty0
+		close(0);
+		open("dev_tty0", O_RDWR);
+	}else{
+		pp(line);
+	}
 }
 
 int main(int arg, char *argv[])
@@ -136,15 +152,11 @@ int main(int arg, char *argv[])
         if (gets(buf) && strlen(buf) != 0)
         {
             if (strncmp("ls", buf, 2) == 0)
-            {
-                ls();
-            } else if (strncmp("t", buf, 1) == 0) {
-                memcpy(buf, "orange/hello.bin | orange/says.bin", 35);
-                pp(buf);
-            } else
-            {
-                pp(buf);
-            }
+              ls();
+            else if (strncmp("t", buf, 1) == 0) 
+              run("orange/hello.bin | orange/says.bin");
+            else
+              run(buf);
         }
     }
 }

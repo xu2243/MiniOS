@@ -82,11 +82,11 @@ static int fork_fd_cpy(struct file_desc **filp) {
     int src = proc2pid(p_proc_current);
     for (int i = 0; i < NR_FILES; i++) {
         if (filp[i]->flag == 0) continue;
-        kprintf("$%d ", i);
+        // kprintf("$%d ", i);
         int fd_nr = get_available_fd_table();
         memcpy(&f_desc_table[fd_nr], filp[i], sizeof(struct file_desc));
         // memcpy((void *)(&f_desc_table[fd_nr]), (void*)va2la(src, filp[i]), sizeof(struct file_desc));
-        kprintf("[%x %x]", f_desc_table[fd_nr].fd_node.fd_inode, filp[i]->fd_node.fd_inode);
+        // kprintf("[%x %x]", f_desc_table[fd_nr].fd_node.fd_inode, filp[i]->fd_node.fd_inode);
         filp[i] = (struct file_desc*)(&f_desc_table[fd_nr]);
         filp[i]->fd_node.fd_inode->i_cnt++;
         if (filp[i]->dev_index == PIPEFIFO) {

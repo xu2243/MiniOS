@@ -8,6 +8,6 @@ int main()
     for (;;)
     {
         printf("Hello world!\n");
-        exit(0);
+        yield();
     }
 }
