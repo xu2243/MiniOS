@@ -51,7 +51,8 @@ void get_filename(char *filename, char *line, int idx)
     printf("file:*%s*\n", filename);
 }
 
-void pp(char *buf) {
+void pp(char *buf)
+{
     int pipenum = 0;
     for (int i = 0; i < strlen(buf) - 1; i++)
     {
@@ -68,7 +69,7 @@ void pp(char *buf) {
         {
             // 暂不支持1个以上的管道
             printf("pipe more than 1\n");
-            return ;
+            return;
         }
 
         int pipefd[2];
@@ -76,35 +77,44 @@ void pp(char *buf) {
         if (pipe(pipefd) == -1)
         {
             printf("pipe failed ");
-            return ;
-        } else {
-            printf("pipe good!! ");
+            return;
+        }
+        else
+        {
+            // printf("pipe good!! ");
         }
 
         int cpid = fork();
 
-        printf("pid:%d ", cpid);
+        // printf("[%d, %d]", pipefd[0], pipefd[1]);
 
         if (cpid > 0)
         {
-            printf("father ", cpid);
-            // close(pipefd[0]);
-            // if (dup2(pipefd[1], STD_OUT) == -1)
-            //   printf("dup2 failed\n");
+            // printf("father ");
+            close(pipefd[0]);
+            // printf("close ok ");
+            if (dup2(pipefd[1], STD_OUT) == -1)
+                printf("dup2 failed \n");
+            else
+                printf("dup2 ok ");
             get_filename(eof, buf, 1);
             exec_eof(eof);
-            // printf("error1\n");
+            printf("error1\n");
         }
         else if (cpid == 0)
         {
-            printf("son ");
-            // close(pipefd[1]);
+            // printf("son ");
+            close(pipefd[1]);
+            // printf("close ok ");
             // if (dup2(pipefd[0], STD_IN) == -1)
-            //   printf("dup2 failed\n");
-            // get_filename(eof, buf, 2);
-            // exec_eof(eof);
-            // printf("error2\n");
-            return ;
+            //     printf("dup2 failed ");
+            // else
+            //     printf("dup2 ok ");
+            printf("son ");
+            get_filename(eof, buf, 2);
+            exec_eof(eof);
+            printf("error2\n");
+            return;
         }
     }
 }
@@ -128,10 +138,13 @@ int main(int arg, char *argv[])
             if (strncmp("ls", buf, 2) == 0)
             {
                 ls();
-            } else if (strncmp("t", buf, 1) == 0) {
+            }
+            else if (strncmp("t", buf, 1) == 0)
+            {
                 memcpy(buf, "orange/hello.bin | orange/says.bin", 35);
                 pp(buf);
-            } else
+            }
+            else
             {
                 pp(buf);
             }

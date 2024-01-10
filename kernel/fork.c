@@ -64,9 +64,9 @@ int sys_fork()
 		/****************用户进程数+1****************************/
 		u_proc_sum += 1;
 
-		vga_write_str_color("[fork success:",0x72);
-		vga_write_str_color(p_proc_current->task.p_name,0x72);
-		vga_write_str_color("]",0x72);
+		// vga_write_str_color("[fork success:",0x72);
+		// vga_write_str_color(p_proc_current->task.p_name,0x72);
+		// vga_write_str_color("]",0x72);
 		
 		//anything child need is prepared now, set its state to ready. added by xw, 17/12/11
 		p_child->task.stat = READY;
@@ -74,7 +74,7 @@ int sys_fork()
 	return p_child->task.pid;	
 }
 
-extern struct file_desc *f_desc_table[64];
+extern struct file_desc f_desc_table[64];
 struct inode;
 struct pipe_inode_info;
 
@@ -82,11 +82,11 @@ static int fork_fd_cpy(struct file_desc **filp) {
     int src = proc2pid(p_proc_current);
     for (int i = 0; i < NR_FILES; i++) {
         if (filp[i]->flag == 0) continue;
-        kprintf("$%d ", i);
+        // kprintf("$%d ", i);
         int fd_nr = get_available_fd_table();
-        // memcpy(&f_desc_table[fd_nr], filp[i], sizeof(struct file_desc));
-        memcpy((void *)(&f_desc_table[fd_nr]), (void*)va2la(src, filp[i]), sizeof(struct file_desc));
-        kprintf("[%x %x]", f_desc_table[fd_nr]->fd_node.fd_inode, filp[i]->fd_node.fd_inode);
+        memcpy(&f_desc_table[fd_nr], filp[i], sizeof(struct file_desc));
+        // kprintf("[%x %x]", i, fd_nr);
+        // kprintf("[%x %x]", f_desc_table[fd_nr].fd_node.fd_inode, filp[i]->fd_node.fd_inode);
         filp[i] = (struct file_desc*)(&f_desc_table[fd_nr]);
         filp[i]->fd_node.fd_inode->i_cnt++;
         if (filp[i]->dev_index == PIPEFIFO) {

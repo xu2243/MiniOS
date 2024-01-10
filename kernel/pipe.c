@@ -155,7 +155,7 @@ int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
     if (fd_num == -1) {
         return -1;
     }
-    kprintf("*%d ", fd_num);
+    // kprintf("*%d ", fd_num);
     /* f_desc_table doesnt have a mutex, probably take concurrency error */
     struct file_desc *pfd = &f_desc_table[f_table_idx];
     pfd->flag = 1;
@@ -220,6 +220,8 @@ int do_pipe(int *pipefd) {
 int pipe_read(int fd, void *buf, int count) {
     struct file_desc *file = p_proc_current->task.filp[fd];
     struct pipe_inode_info *pipe_info = file->fd_node.fd_inode->i_pipe;
+
+    kprintf("*pr");
     
     // Check if the file descriptor is valid
     if (file == NULL || file->flag == 0 || file->fd_mode != READ_MODE || count < 0) {
@@ -278,6 +280,8 @@ int pipe_read(int fd, void *buf, int count) {
 int pipe_write(int fd, const void *buf, int count) {
     struct file_desc *file = p_proc_current->task.filp[fd];
     struct pipe_inode_info *pipe_info = file->fd_node.fd_inode->i_pipe;
+
+    kprintf("*pw");
     
     // Check if the file descriptor is valid
     if (file == NULL || file->flag == 0 || file->fd_mode != WRITE_MODE || count < 0) {
@@ -345,9 +349,10 @@ int pipe_close(int fd) {
     struct file_desc *pfile = p_proc_current->task.filp[fd];
     struct inode *pipe_inode = pfile->fd_node.fd_inode;
     struct pipe_inode_info *pipe_info = pfile->fd_node.fd_inode->i_pipe;
-
+    // kprintf("(%x)", pipe_inode);
     // pipe_info->files--;
     pipe_inode->i_cnt--;
+    // kprintf("(%d)", pipe_inode->i_cnt);
     if (pfile->fd_mode == READ_MODE) pipe_info->r_counter--;
     if (pfile->fd_mode == WRITE_MODE) pipe_info->w_counter--;
 

@@ -10,12 +10,18 @@
 #include "fs_const.h"
 #include "fs.h"
 #include "fs_misc.h"
+#include "stdio.h"
 
-static int do_dup2(int oldfd, int newfd){
-  p_proc_current->task.filp[newfd] = p_proc_current->task.filp[oldfd];
-  return 0;
+static int do_dup2(int oldfd, int newfd) {
+    if (p_proc_current->task.filp[newfd]->flag == 1) {
+        // kprintf("newfd:%d", newfd);
+        close(newfd);
+        // kprintf("newfd close");
+    }
+    p_proc_current->task.filp[newfd] = p_proc_current->task.filp[oldfd];
+    return 0;
 }
 
 int sys_dup2(void* uesp) {
-  return do_dup2(get_arg(uesp, 1), get_arg(uesp, 2));
+    return do_dup2(get_arg(uesp, 1), get_arg(uesp, 2));
 }

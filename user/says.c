@@ -5,9 +5,10 @@
 int main()
 {
     char line[1024];
+    line[0] = 0;
     for (;;)
     {
-        gets(line);
+        // gets(line);
         printf("pipe says:[%s]\n", line);
         yield();
     }
