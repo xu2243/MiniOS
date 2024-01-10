@@ -45,7 +45,6 @@ int do_wait(int *wstatus){
     p_proc_current->task.stat = SLEEPING;
     sched();
   }
-
 }
 
 int sys_wait(void* uesp){

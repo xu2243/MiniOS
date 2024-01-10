@@ -79,21 +79,22 @@ void pp(char *buf)
 
         int cpid = fork();
 
-        // printf("[%d, %d]", pipefd[0], pipefd[1]);
+        printf("[%d, %d]", pipefd[0], pipefd[1]);
 
 		if (cpid > 0) {
 			printf("father, son:%d\n", cpid);
-			close(pipefd[0]);
-			if (dup2(pipefd[1], STD_OUT) == -1)
-				printf("dup2 failed\n");
+			// close(pipefd[0]);
+			// if (dup2(pipefd[1], STD_OUT) == -1)
+			// 	printf("dup2 failed\n");
 			get_filename(eof, buf, 1);
 			exec_eof(eof);
 		}
 		else if (cpid == 0) {
 			printf("son\n");
-			close(pipefd[1]);
-			if (dup2(pipefd[0], STD_IN) == -1)
-				printf("dup2 failed\n");
+			// close(pipefd[1]);
+			// if (dup2(pipefd[0], STD_IN) == -1)
+			// 	printf("dup2 failed\n");
+			// printf("dup2 !!!!!!\n");
 			get_filename(eof, buf, 2);
 			exec_eof(eof);
         }
@@ -156,8 +157,12 @@ int main(int arg, char *argv[])
         {
             if (strncmp("ls", buf, 2) == 0)
               ls();
-            else if (strncmp("t", buf, 1) == 0) 
+            else if (strncmp("t1", buf, 2) == 0) 
               run("orange/hello.bin | orange/says.bin");
+            else if (strncmp("t2", buf, 2) == 0) 
+              run("orange/repeat_w.bin | orange/repeat_r.bin");
+            else if (strncmp("t3", buf, 2) == 0) 
+              run("orange/a.bin | orange/b.bin | orange/c.bin");
             else
               run(buf);
         }
