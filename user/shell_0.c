@@ -64,7 +64,12 @@ void pp(char *buf) {
       int cpid = fork();
 
       if(cpid > 0){
-        waity(NULL);
+        printf("wait4 child:%d\n", cpid);
+        int wpid = waity(NULL);
+        printf("child:%d exited!\n", wpid);
+        //神奇的地方在于，如果不写这两行那么stdin不再连接到tty0
+        close(0);
+        open("dev_tty0", O_RDWR);
       }else{
         exec_eof(buf);
       }

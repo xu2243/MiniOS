@@ -25,6 +25,12 @@ void do_exit(int status){
     }
   }
 
+  for(i=0; i<NR_FILES; i++){
+    if(p_proc_current->task.filp[i]->flag == 1){
+      do_vclose(i);
+    }
+  }
+
   for(;;){
     if(xchg(&p->task.lock, 1) == 1)
       goto loop;
