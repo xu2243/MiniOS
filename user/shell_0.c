@@ -329,6 +329,7 @@ void pipe_test(){
 		printf("father, son:%d\n", cpid);
 		close(pipefd[0]);
 		write(pipefd[1], "hi son", 7);
+    waity(NULL);
 		exit(0);
 	}
 	else if (cpid == 0) {
@@ -337,7 +338,7 @@ void pipe_test(){
 		close(pipefd[1]);
 		printf("father says:");
 		read(pipefd[0], line, 1024);
-		printf("%s", line);
+		printf("%s\n", line);
 		exit(0);
 	}
 }
