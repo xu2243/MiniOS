@@ -25,9 +25,9 @@ void do_exit(int status){
     }
   }
 
-  for(i=0; i<NR_FILES; i++){
+  for(i=3; i<NR_FILES; i++){
     if(p_proc_current->task.filp[i]->flag == 1){
-      do_vclose(i);
+      // do_vclose(i);
     }
   }
 
