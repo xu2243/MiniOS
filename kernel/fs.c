@@ -1135,6 +1135,7 @@ static int do_close(int fd)
         pipe_close(fd);
         return 0;
     }
+    // kprintf("(close:%d,%d)", p_proc_current->task.filp[fd]->fd_node.fd_inode->i_cnt, fd);
 	put_inode(p_proc_current->task.filp[fd]->fd_node.fd_inode); //modified by mingxuan 2019-5-17
 	p_proc_current->task.filp[fd]->fd_node.fd_inode = 0; //modified by mingxuan 2019-5-17
 	p_proc_current->task.filp[fd]->flag = 0; //added by mingxuan 2019-5-17
@@ -1521,7 +1522,7 @@ static int do_unlink(MESSAGE *fs_msg)
 
 	struct inode * pin = get_inode_sched(dir_inode->i_dev, inode_nr);	//modified by xw, 18/8/28
 
-    if (pin->i_cnt > 0) {	/* the file was opened */
+    if (pin->i_cnt > 1) {	/* the file was opened */
 		kprintf("cannot remove file %s, because pin->i_cnt is %d\n", pathname, pin->i_cnt);
 		return -1;
 	}
