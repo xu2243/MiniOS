@@ -89,7 +89,7 @@ static int fork_fd_cpy(struct file_desc **filp) {
         // kprintf("[%x %x]", f_desc_table[fd_nr].fd_node.fd_inode, filp[i]->fd_node.fd_inode);
         filp[i] = (struct file_desc*)(&f_desc_table[fd_nr]);
         filp[i]->fd_node.fd_inode->i_cnt++;
-        if (filp[i]->dev_index == PIPEFIFO) {
+        if (filp[i]->fd_node.fd_inode->i_mode == I_NAMED_PIPE || filp[i]->fd_node.fd_inode->i_mode == I_UNAMED_PIPE) {
             if (filp[i]->fd_mode == WRITE_MODE)
                 filp[i]->fd_node.fd_inode->i_pipe->w_counter++;
             else if(filp[i]->fd_mode == READ_MODE)

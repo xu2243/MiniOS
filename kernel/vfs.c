@@ -88,11 +88,11 @@ void init_fileop_table()
 
     // table[3] for pipefifo vfs
     // f_op_table[3].create = mkfifo;
-    f_op_table[3].open = real_open; 
-    f_op_table[3].close = pipe_close;
-    f_op_table[3].write = pipe_write;
-    f_op_table[3].read = pipe_read;
-    f_op_table[3].unlink = real_unlink;
+    // f_op_table[3].open = real_open; 
+    // f_op_table[3].close = pipe_close;
+    // f_op_table[3].write = pipe_write;
+    // f_op_table[3].read = pipe_read;
+    // f_op_table[3].unlink = real_unlink;
 
 }
 
@@ -179,10 +179,10 @@ static void init_vfs_table(){  // modified by mingxuan 2020-10-30
     vfs_table[4].sb = &super_block[3];      //added by mingxuan 2020-10-30
     vfs_table[4].s_op = &sb_op_table[0];    //added by mingxuan 2020-10-30
 
-    vfs_table[PIPEFIFO].fs_name = "pipefifo"; 
-    vfs_table[PIPEFIFO].op = &f_op_table[3];
-    vfs_table[PIPEFIFO].sb = &super_block[3];      
-    vfs_table[PIPEFIFO].s_op = &sb_op_table[0];    
+    // vfs_table[PIPEFIFO].fs_name = "pipefifo"; 
+    // vfs_table[PIPEFIFO].op = &f_op_table[3];
+    // vfs_table[PIPEFIFO].sb = &super_block[3];      
+    // vfs_table[PIPEFIFO].s_op = &sb_op_table[0];    
 
 }
 
@@ -337,7 +337,7 @@ int do_vwrite(int fd, const char *buf, int count) {
             fsbuf++;
         }
         //bytes = device_table[index].op->write(fd,s,iobytes);
-        // kprintf("write!");
+        // kprintf("[write!:%d]", index);
         bytes = vfs_table[index].op->write(fd,s,iobytes);   //modified by mingxuan 2020-10-18
         if(bytes != iobytes)
         {

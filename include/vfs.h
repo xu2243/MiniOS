@@ -35,7 +35,7 @@ struct vfs{
 #define dev_tty2    2
 #define fat0        3
 #define orange      4
-#define PIPEFIFO    5
+// #define PIPEFIFO    5
 
 int sys_open(void *uesp);
 int sys_close(void *uesp);

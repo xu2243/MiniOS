@@ -443,7 +443,7 @@ static int do_open(MESSAGE *fs_msg)
 	assert(i < NR_FILE_DESC);
 
 	int inode_nr = search_file(pathname);
-    kprintf("{%d}", inode_nr);
+    // kprintf("{%s:%d}", pathname, inode_nr);
 	struct inode * pin = 0;
 	if (flags & O_CREAT) {
 		if (inode_nr) {
@@ -522,6 +522,8 @@ static struct inode * create_file(char * path, int flags)
 
 	if (strip_path(filename, path, &dir_inode) != 0)
 		return 0;
+
+    // kprintf("[%d]", dir_inode->i_dev);
 
 	int inode_nr = alloc_imap_bit(dir_inode->i_dev);
 
@@ -613,7 +615,7 @@ static int search_file(char * path)
 		pde = (struct dir_entry *)fsbuf;
 		for (j = 0; j < SECTOR_SIZE / DIR_ENTRY_SIZE; j++,pde++) {
             if (pde->inode_nr == 0) continue;
-            if(((filename[0] == 's' && filename[1] == 'a') || filename[0] == 'h') && pde->name[0] != 'd') kprintf("[%c %s]", filename[0], pde->name);
+            // if(((filename[0] == 's' && filename[1] == 'a') || filename[0] == 'h') && pde->name[0] != 'd') kprintf("[%c %s]", filename[0], pde->name);
 			if (memcmp(filename, pde->name, MAX_FILENAME_LEN) == 0)
 				return pde->inode_nr;
 			if (++m > nr_dir_entries)
@@ -670,6 +672,8 @@ int strip_path(char * filename, const char * pathname, struct inode** ppinode)
 	while (*s) {		/* check each character */
 		if (*s == '/')
 			return -1;
+        if (*s == 0)
+            break;
 		*t++ = *s++;
 		/* if filename is too long, just truncate it */
 		if (t - filename >= MAX_FILENAME_LEN)
@@ -1127,6 +1131,10 @@ int real_close(int fd)	//modified by mingxuan 2019-5-17
  *****************************************************************************/
 static int do_close(int fd)
 {
+    if (p_proc_current->task.filp[fd]->fd_node.fd_inode->i_mode == I_UNAMED_PIPE) {
+        pipe_close(fd);
+        return 0;
+    }
 	put_inode(p_proc_current->task.filp[fd]->fd_node.fd_inode); //modified by mingxuan 2019-5-17
 	p_proc_current->task.filp[fd]->fd_node.fd_inode = 0; //modified by mingxuan 2019-5-17
 	p_proc_current->task.filp[fd]->flag = 0; //added by mingxuan 2019-5-17
@@ -1217,6 +1225,14 @@ static int do_rdwt(MESSAGE *fs_msg)
 	int len = fs_msg->CNT;	/**< r/w bytes */
 
 	int src = fs_msg->source;		/* caller proc nr. */
+
+    if (p_proc_current->task.filp[fd]->fd_node.fd_inode->i_mode == I_UNAMED_PIPE || 
+        p_proc_current->task.filp[fd]->fd_node.fd_inode->i_mode == I_NAMED_PIPE) {
+        // kprintf("[fifo]");
+        if (fs_msg->type == READ) pipe_read(fd, buf, len);
+        if (fs_msg->type == WRITE) pipe_write(fd, buf, len);
+        return 0;
+    }
 
 	if (!(p_proc_current->task.filp[fd]->fd_mode & O_RDWR))
 		return -1;

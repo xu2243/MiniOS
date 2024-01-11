@@ -111,28 +111,15 @@ struct pipe_inode_info *alloc_pipe_info() {
 }
 
 
-struct inode *get_pipe_inode(int i_mode) {
-    struct inode *inode = NULL;
-    if (i_mode == I_NAMED_PIPE) {
-        /* This is the named pipe, we alloc it into the inode table */
-        int inode_nr = alloc_imap_bit(PIPEFIFO);
-        int free_sect_nr = alloc_smap_bit(PIPEFIFO, NR_DEFAULT_FILE_SECTS);
-        inode = get_inode(PIPEFIFO, inode_nr);
-        inode->i_num = inode_nr;
-    } else
-        /* This is the unnamed pipe, as a result, we haven't assigned it 
-         * an inode number and have allocated memory for it using malloc 
-         * independently, instead of taking the inode table in fs.c.
-         */
-        inode = (void*)K_PHY2LIN(sys_kmalloc(sizeof(struct inode)));
+int get_pipe_inode(int i_mode, struct inode *inode) {
     struct pipe_inode_info *pipe = alloc_pipe_info();
 
     inode->i_mode = i_mode;
-    inode->i_dev = PIPEFIFO;
+    inode->i_dev = 800;
     // inode->i_num = 0;
     inode->i_pipe = pipe;
 
-    return inode;
+    return 0;
 }
 
 /* find a free slot in PROCESS::filp[] */
@@ -174,7 +161,7 @@ int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
     // so I just use it on my own way, distinguish read and write mode 
 
     pfd->fd_mode = mode;
-    pfd->dev_index = PIPEFIFO;
+    pfd->dev_index = orange;
     ptr->fd_inode = pipe_inode;
     // pipe_inode->i_pipe->files++;
     pipe_inode->i_cnt++;
@@ -209,7 +196,12 @@ int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
  * 
  */
 int do_pipe(int *pipefd) {
-    struct inode *pipe_inode = get_pipe_inode(0);
+    struct inode *pipe_inode = (void*)K_PHY2LIN(sys_kmalloc(sizeof(struct inode)));;
+    /* This is the unnamed pipe, as a result, we haven't assigned it 
+    * an inode number and have allocated memory for it using malloc 
+    * independently, instead of taking the inode table in fs.c.
+    */
+    get_pipe_inode(I_UNAMED_PIPE, pipe_inode);
     if (create_pipe(&pipefd[0], pipe_inode, READ_MODE) == -1) {
         /* error handler */
         kprintf("pipe failed!");
@@ -233,8 +225,13 @@ int pipe_read(int fd, void *buf, int count) {
     // kprintf("[%d*pr]", p_proc_current->task.pid);
     
     // Check if the file descriptor is valid
-    if (file == NULL || file->flag == 0 || file->fd_mode != READ_MODE || count < 0) {
+    if (file == NULL || file->flag == 0 || count < 0) {
         // errno = EBADF; // Bad file descriptor
+        return -1;
+    }
+
+    if (file->fd_mode != READ_MODE && file->fd_mode != O_RDWR) {
+        kprintf("[Bad file descriptor]");
         return -1;
     }
 
@@ -266,6 +263,7 @@ int pipe_read(int fd, void *buf, int count) {
             return ret;
         } else if (pipe_info->max_usage > 0) {
             *(char *)(buf + ret) = *(pipe_info->bufs + (pipe_info->head % PAGE_SIZE));
+            // kprintf("%c", *(char *)(buf + ret));
             pipe_info->head++;
             pipe_info->max_usage--;
             pipe_info->head %= PAGE_SIZE;
@@ -300,8 +298,14 @@ int pipe_write(int fd, const void *buf, int count) {
     // kprintf("[%d*pw]", p_proc_current->task.pid);
     
     // Check if the file descriptor is valid
-    if (file == NULL || file->flag == 0 || file->fd_mode != WRITE_MODE || count < 0) {
+    if (file == NULL || file->flag == 0 || count < 0) {
         // errno = EBADF; // Bad file descriptor
+        kprintf("[Bad file descriptor]");
+        return -1;
+    }
+
+    if (file->fd_mode != WRITE_MODE && file->fd_mode != O_RDWR) {
+        kprintf("[Bad file descriptor]");
         return -1;
     }
 
@@ -329,6 +333,7 @@ int pipe_write(int fd, const void *buf, int count) {
             return ret;
         } else if (pipe_info->max_usage < PAGE_SIZE) {
             *(char *)(pipe_info->bufs + (pipe_info->tail % PAGE_SIZE)) = *(char *)(buf + ret);
+            // kprintf("%c", *(char *)(buf + ret));
             pipe_info->tail++;
             pipe_info->max_usage++;
             pipe_info->tail %= PAGE_SIZE;
@@ -384,17 +389,37 @@ int pipe_close(int fd) {
 }
 
 int do_mkfifo(const char *path) {
-    char filename[MAX_PATH];
-    struct inode *pipe_inode = get_pipe_inode(I_NAMED_PIPE);
-	struct inode * dir_inode;
+    // kprintf("{here mkfifo!}");
+    char filename[MAX_FILENAME_LEN];
+    char pathname[MAX_PATH];
+    struct inode * dir_inode, *fifoinode;
+    // kprintf("{%s}", path);
+    memcpy(pathname, path, strlen(path));
+    memset(filename, 0, MAX_FILENAME_LEN);
 
-	if (strip_path(filename, path, &dir_inode) != 0)
-		return -1;
+    if (strip_path(filename, pathname, &dir_inode) != 0) {
+		kprintf("{bad path!}");
+        return -1;
+    }
+    // kprintf("(%s)", filename);
 
-	new_dir_entry(dir_inode, pipe_inode->i_num, filename);
+    /* This is the named pipe, we alloc it into the inode table */
+    int inode_nr = alloc_imap_bit(dir_inode->i_dev);
+    int free_sect_nr = alloc_smap_bit(dir_inode->i_dev, NR_DEFAULT_FILE_SECTS);
+    fifoinode = get_inode(dir_inode->i_dev, inode_nr);
+
+    // kprintf("(%s:%d)", filename, inode_nr);
+
+    get_pipe_inode(I_NAMED_PIPE, fifoinode);
+
+    fifoinode->i_start_sect = free_sect_nr;
+	fifoinode->i_nr_sects = NR_DEFAULT_FILE_SECTS;
+    fifoinode->i_num = inode_nr;
 
     /* update dir inode */
-	sync_inode(dir_inode);
+	sync_inode(fifoinode);
+
+	new_dir_entry(dir_inode, fifoinode->i_num, filename);
 
 	return 0;
 }
@@ -410,5 +435,5 @@ int sys_pipe(void *uesp) {
 }
 
 int sys_mkfifo(void *uesp) {
-    return do_mkfifo((char *)get_arg(uesp, 1));
+    return do_mkfifo((const char *)get_arg(uesp, 1));
 }
