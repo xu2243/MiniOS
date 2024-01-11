@@ -72,60 +72,6 @@ void c(){
 	}
 }
 
-void hello(){
-	printf("Hello world!\n");
-	yield();
-}
-
-void says(){
-	char line[1024];
-	for(;;){
-		gets(line);
-		printf("pipe says:%s\n", line);
-	}
-}
-
-void repeat_r(){
-	char line[1024];
-    for (;;)
-    {
-      printf("%c", getchar());
-    }
-}
-
-void repeat_w(){
-	int i;
-    //确保读进程加入读等待队列
-    yield();
-    for (;;)
-    {
-      printf("repeat");
-    }
-}
-
-void a(){
-	for(;;){
-		printf("pipe chain!\n");
-		yield();
-	}
-}
-
-void b(){
-	char line[1024];
-	for(;;){
-		printf("%s", gets(line));
-		yield();
-	}
-}
-
-void c(){
-	char line[1024];
-	for(;;){
-		printf("%s", gets(line));
-		yield();
-	}
-}
-
 // 复制line里的第idx个文件名到filename中
 void get_filename(char *filename, char *line, int idx)
 {
