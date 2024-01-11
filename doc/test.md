@@ -114,6 +114,111 @@ from father:hello, my son!
 
 ### 系统分析
 
+进入实现环节，我们不仅需要熟悉系统调用的功能，还要深入其中了解其实现细节。
+
+所谓管道，是指用于连接一个读进程和一个写进程，以实现它们之间通信的共享文件，又称 pipe 文件。
+
+向管道（共享文件）提供输入的发送进程（即写进程），以字符流形式将大量的数据送入管道；而接收管道输出的接收进程（即读进程），可从管道中接收数据。由于发送进程和接收进程是利用管道进行通信的，故又称管道通信。
+
+这种通信形式在类Unix操作系统中被统一进了文件系统，通信就是发送消息和接收消息的过程，本质和文件读写一样，因此管道通信也就被统一成了对**管道类文件**的读写。既然是文件，那么就需要按**文件描述符**和**inode**的方式来管理。
+
+```c
+// in fs_misc.h
+/**
+ * @struct inode
+ * @brief  i-node
+ *
+ * The \c start_sect and\c nr_sects locate the file in the device,
+ * and the size show how many bytes is used.
+ * If <tt> size < (nr_sects * SECTOR_SIZE) </tt>, the rest bytes
+ * are wasted and reserved for later writing.
+ *
+ * \b NOTE: Remember to change INODE_SIZE if the members are changed
+ */
+struct inode {
+	u32	i_mode;		/**< Accsess mode */
+	u32	i_size;		/**< File size */
+	u32	i_start_sect;	/**< The first sector of the data */
+	u32	i_nr_sects;	/**< How many sectors the file occupies */
+	u8	_unused[16];	/**< Stuff for alignment */
+
+	/* the following items are only present in memory */
+	int	i_dev;
+	int	i_cnt;		/**< How many procs share this inode  */
+	int	i_num;		/**< inode nr.  */
+
+    struct pipe_inode_info	*i_pipe; // added by xuxinping 2023-12-31
+};
+```
+
+我们在pipe_inode里添加了一个字段，这是一个从linux的定义中简化过来的版本：
+
+```
+struct pipe_inode_info	*i_pipe; 
+
+/**
+ *	struct pipe_inode_info - Simplified version of pipe, ported from Linux.
+ *	@mutex: mutex protecting the whole thing
+ *	@rd_wait: reader wait point in case of empty pipe
+ *	@wr_wait: writer wait point in case of full pipe
+ *	@head: The point of buffer production
+ *	@tail: The point of buffer consumption
+ *	@note_loss: The next read() should insert a data-lost message
+ *	@max_usage: how many buf i ve used
+ *	@ring_size: total number of buffers (should be a power of 2)
+ *	@nr_accounted: The amount this pipe accounts for in user->pipe_bufs
+ *	@tmp_page: cached released page
+ *	@readers: number of current readers of this pipe
+ *	@writers: number of current writers of this pipe
+ *	@files: number of struct file referring this pipe (protected by ->i_lock)
+ *	@r_counter: reader counter
+ *	@w_counter: writer counter
+ *	@poll_usage: is this pipe used for epoll, which has crazy wakeups?
+ *	@fasync_readers: reader side fasync
+ *	@fasync_writers: writer side fasync
+ *	@bufs: the circular array of pipe buffers
+ *	@user: the user who created this pipe
+ *	@watch_queue: If this pipe is a watch_queue, this is the stuff for that
+ **/
+struct pipe_inode_info {
+	struct spinlock mutex;
+	wait_queue_head_t rd_wait, wr_wait;
+	unsigned int head;
+	unsigned int tail;
+	unsigned int max_usage;
+	unsigned int ring_size;
+#ifdef CONFIG_WATCH_QUEUE
+	bool note_loss;
+#endif
+	// unsigned int nr_accounted;
+	unsigned int readers;
+	unsigned int writers;
+	// use inode->cnt instead. files is repeated.
+    // unsigned int files; 
+	unsigned int r_counter;
+	unsigned int w_counter;
+	// bool poll_usage;
+	// struct page *tmp_page;
+	// struct fasync_struct *fasync_readers;
+	// struct fasync_struct *fasync_writers;
+	char *bufs;
+	PROCESS *user;
+#ifdef CONFIG_WATCH_QUEUE
+	struct watch_queue *watch_queue;
+#endif
+};
+```
+
+
+
+
+
+为了协调双方的通信，管道通信机制必须提供以下3 方面的协调能力。
+
+- 互斥。当一个进程正在对 pipe 进行读/写操作时，另一个进程必须等待。
+- 同步。当写（输入）进程把一定数量（如4KB）数据写入 pipe 后，便去睡眠等待，直到读（输出）进程取走数据后，再把它唤醒。当读进程读到一空 pipe 时，也应睡眠等待，直至写进程将数据写入管道后，才将它唤醒。
+- 对方是否存在。只有确定对方已存在时，才能进行通信。
+
 首先我们有对应的调用函数，作为pipe对外的接口：
 
 ```c
@@ -161,7 +266,11 @@ f_op_table[3].close = pipe_release;
 f_op_table[3].write = pipe_write;
 f_op_table[3].read = pipe_read;
 f_op_table[3].unlink = pipe_unlink;
+```
 
+新增了一个虚拟文件系统pipefifo：
+
+```c
 vfs_table[PIPEFIFO].fs_name = "pipefifo"; 
 vfs_table[PIPEFIFO].op = &f_op_table[3];
 ```
@@ -181,7 +290,7 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
 
 也就是说，orange的文件系统用inode的i_mode字段把文件分为了：目录文件，常规文件，块设备文件，字符设备文件，fifo文件等。
 
-
+虽然我们的pipe
 
 
 

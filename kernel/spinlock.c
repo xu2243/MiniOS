@@ -10,6 +10,7 @@
 //#include "param.h"
 //#include "proc.h"
 #include "spinlock.h"
+#include "proto.h"
 
 //extern int use_console_lock;
 
@@ -41,7 +42,7 @@ acquire(struct spinlock *lock)
 {
 
   while(cmpxchg(0, 1, &lock->locked) == 1)
-    ;
+    sched();
 }
 
 // Release the lock.

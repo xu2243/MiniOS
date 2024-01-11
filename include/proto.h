@@ -51,6 +51,8 @@ void initial();
 void init_kb();
 void keyboard_read();
 
+typedef struct s_tty TTY;
+
 /* tty.c */
 //added by mingxuan 2019-5-19
 void in_process(TTY* p_tty,u32 key);

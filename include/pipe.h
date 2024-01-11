@@ -1,6 +1,7 @@
 #ifndef PIPE_H 
 #define PIPE_H  
 #include "list.h"
+#include "spinlock.h"
 
 #define PIPE_BUF_PAGE_NUM   1
 #define KB (unsigned)(1024)
@@ -10,6 +11,7 @@
 #define WRITE_MODE  0x2
 
 struct list_head;
+struct spinlock;
 
 typedef struct wait_queue_head{
     struct list_head wait_queue;
@@ -42,7 +44,7 @@ typedef struct wait_queue_head{
  *	@watch_queue: If this pipe is a watch_queue, this is the stuff for that
  **/
 struct pipe_inode_info {
-	int mutex;
+	struct spinlock mutex;
 	wait_queue_head_t rd_wait, wr_wait;
 	unsigned int head;
 	unsigned int tail;

@@ -17,9 +17,11 @@
 #include "string.h"
 #include "stdio.h"
 #include "memman.h"
+#include "spinlock.h"
 // #include "list.h"
 
 #define MAX_PIPE_INODE 512
+#define PIPE_LOCK "pipe_lock"
 
 extern struct file_desc f_desc_table[NR_FILE_DESC];
 struct wait_queue_head_t;
@@ -99,6 +101,8 @@ struct pipe_inode_info *alloc_pipe_info() {
     memset(pipe, 0, sizeof(struct pipe_inode_info));
     pipe->ring_size = PIPE_BUF_PAGE_NUM * PAGE_SIZE;
     pipe->user = p_proc_current;
+    
+    initlock(&pipe->mutex, "PIPE_LOCK");
 
     init_queue_head(&pipe->rd_wait);
     init_queue_head(&pipe->wr_wait);
@@ -242,13 +246,20 @@ int pipe_read(int fd, void *buf, int count) {
     }
     pipe_info->readers++;
 
-    while (pipe_info->mutex || wait_queue_head(&pipe_info->rd_wait) != p_proc_current) {
-        // kprintf("[Rseched, mtx=%d]", pipe_info->mutex);
+    // while (pipe_info->mutex || wait_queue_head(&pipe_info->rd_wait) != p_proc_current) {
+    //     // kprintf("[Rseched, mtx=%d]", pipe_info->mutex);
+    //     p_proc_current->task.stat = SLEEPING;
+	// 	sched();
+    // }
+
+    // pipe_info->mutex = 1;
+
+    while (wait_queue_head(&pipe_info->rd_wait) != p_proc_current) {
         p_proc_current->task.stat = SLEEPING;
 		sched();
     }
 
-    pipe_info->mutex = 1;
+    acquire(&(pipe_info->mutex));
 
     // TODO: memcpy from pipe_info->bufs to user buffer
     unsigned int ret = 0;
@@ -259,7 +270,8 @@ int pipe_read(int fd, void *buf, int count) {
             wait_queue_pop(&pipe_info->rd_wait);
             wait_queue_head(&file->fd_node.fd_inode->i_pipe->wr_wait)->task.stat = READY;
             pipe_info->readers--;
-            pipe_info->mutex = 0;
+            // pipe_info->mutex = 0;
+            release(&pipe_info->mutex);
             return ret;
         } else if (pipe_info->max_usage > 0) {
             *(char *)(buf + ret) = *(pipe_info->bufs + (pipe_info->head % PAGE_SIZE));
@@ -271,20 +283,23 @@ int pipe_read(int fd, void *buf, int count) {
         } else {
             if (pipe_info->w_counter == 0) {
                 pipe_info->readers--;
-                pipe_info->mutex = 0;
+                // pipe_info->mutex = 0;
+                release(&pipe_info->mutex);
                 return ret;
             }
             // kprintf("**************%d***************\n", wait_queue_head(&file->fd_node.fd_inode->i_pipe->wr_wait)->task.pid);
             wait_queue_head(&file->fd_node.fd_inode->i_pipe->wr_wait)->task.stat = READY;
-            pipe_info->mutex = 0;
+            // pipe_info->mutex = 0;
+            release(&pipe_info->mutex);
             p_proc_current->task.stat = SLEEPING;
 		    sched();
 
-            while (pipe_info->mutex) {
-                p_proc_current->task.stat = SLEEPING;
-                sched();
-            }
-            pipe_info->mutex = 1;
+            // while (pipe_info->mutex) {
+            //     p_proc_current->task.stat = SLEEPING;
+            //     sched();
+            // }
+            // pipe_info->mutex = 1;
+            acquire(&pipe_info->mutex);
         }
     }
     // never come to here.
@@ -313,13 +328,20 @@ int pipe_write(int fd, const void *buf, int count) {
     // kprintf("[%d]", wait_queue_head(&pipe_info->wr_wait)->task.pid);
     pipe_info->writers++;
 
-    while (pipe_info->mutex || wait_queue_head(&pipe_info->wr_wait) != p_proc_current) {
-        // kprintf("[Wseched, mtx=%d]", pipe_info->mutex);
+    // while (pipe_info->mutex || wait_queue_head(&pipe_info->wr_wait) != p_proc_current) {
+    //     // kprintf("[Wseched, mtx=%d]", pipe_info->mutex);
+    //     p_proc_current->task.stat = SLEEPING;
+	// 	sched();
+    // }
+
+    // pipe_info->mutex = 1;
+
+    while (wait_queue_head(&pipe_info->wr_wait) != p_proc_current) {
         p_proc_current->task.stat = SLEEPING;
 		sched();
     }
 
-    pipe_info->mutex = 1;
+    acquire(&pipe_info->mutex);
 
     // TODO: memcpy from pipe_info->bufs to user buffer
     unsigned int ret = 0;
@@ -329,7 +351,8 @@ int pipe_write(int fd, const void *buf, int count) {
             wait_queue_pop(&pipe_info->wr_wait);
             wait_queue_head(&file->fd_node.fd_inode->i_pipe->rd_wait)->task.stat = READY;
             pipe_info->writers--;
-            pipe_info->mutex = 0;
+            // pipe_info->mutex = 0;
+            release(&pipe_info->mutex);
             return ret;
         } else if (pipe_info->max_usage < PAGE_SIZE) {
             *(char *)(pipe_info->bufs + (pipe_info->tail % PAGE_SIZE)) = *(char *)(buf + ret);
@@ -341,19 +364,23 @@ int pipe_write(int fd, const void *buf, int count) {
         } else {
             if (pipe_info->r_counter == 0) {
                 pipe_info->readers--;
-                pipe_info->mutex = 0;
+                // pipe_info->mutex = 0;
+                release(&pipe_info->mutex);
                 return ret;
             }
             wait_queue_head(&file->fd_node.fd_inode->i_pipe->rd_wait)->task.stat = READY;
-            pipe_info->mutex = 0;
+            // pipe_info->mutex = 0;
+            release(&pipe_info->mutex);
             p_proc_current->task.stat = SLEEPING;
 		    sched();
 
-            while (pipe_info->mutex) {
-                p_proc_current->task.stat = SLEEPING;
-                sched();
-            }
-            pipe_info->mutex = 1;
+            // while (pipe_info->mutex) {
+            //     p_proc_current->task.stat = SLEEPING;
+            //     sched();
+            // }
+            
+            // pipe_info->mutex = 1;
+            acquire(&pipe_info->mutex);
         }
     }
     // never come to here.

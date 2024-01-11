@@ -2,6 +2,9 @@
 *	spinlock.h       //added by mingxuan 2018-12-26
 ***********************************************************/
 
+#ifndef SPINLOCK_H
+#define SPINLOCK_H
+
 // Mutual exclusion lock.
 #define uint unsigned
 struct spinlock {
@@ -24,6 +27,6 @@ void acquire(struct spinlock *lock);
 void release(struct spinlock *lock);
 
 
-
+#endif
 
 
