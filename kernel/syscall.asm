@@ -384,8 +384,11 @@ pipe:
 	ret
 
 mkfifo:
+	push	ebx
+	mov	ebx, esp
 	mov	eax, _NR_mkfifo
 	int	INT_VECTOR_SYS_CALL
+    pop	ebx
 	ret
 
 ls:
