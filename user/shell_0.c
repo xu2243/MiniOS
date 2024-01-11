@@ -329,6 +329,7 @@ void pipe_test(){
 		printf("father, son:%d\n", cpid);
 		close(pipefd[0]);
 		write(pipefd[1], "hi son", 7);
+		waity(NULL);
 		exit(0);
 	}
 	else if (cpid == 0) {
@@ -337,7 +338,7 @@ void pipe_test(){
 		close(pipefd[1]);
 		printf("father says:");
 		read(pipefd[0], line, 1024);
-		printf("%s", line);
+		printf("%s\n", line);
 		exit(0);
 	}
 }
@@ -376,6 +377,22 @@ void run(char* line, int tn){
 
 }
 
+void shell_mkfifo(char* line){
+	//mkfifo /fifo
+	char* path = line + 6;
+	for(; *path == ' '; path++);
+    if (mkfifo(path) != 0)
+        printf("mkfifo failed!\n");
+}
+
+void shell_rm(char* line){
+	//rm /fifo
+	char* path = line + strlen("rm");
+	for(; *path == ' '; path++);
+	if(unlink(path) != 0)
+		printf("rm failed!\n");
+}
+
 int main(int arg, char *argv[])
 {
     stdin = open("dev_tty0", O_RDWR);
@@ -396,6 +413,10 @@ int main(int arg, char *argv[])
         {
             if (strncmp("ls", buf, 2) == 0)
               ls();
+            else if (strncmp("mkfifo", buf, 6) == 0)
+				shell_mkfifo(buf);
+            else if (strncmp("rm", buf, 2) == 0)
+				shell_rm(buf);
             else if (strncmp("t1", buf, 2) == 0) 
               run("hello | says", 1);			//测试案例引号里的东西没有实际作用，仅作注释
             else if (strncmp("t2", buf, 2) == 0) 
@@ -404,8 +425,8 @@ int main(int arg, char *argv[])
               run("a | b | c", 3);
             else if (strncmp("fifo", buf, 4) == 0) 
               run("fifo test", 4);
-			else if (strncmp("pipe", buf, 4) == 0)
-				run("pipe test", 5);
+            else if (strncmp("pipe", buf, 4) == 0)
+              run("pipe test", 5);
             else
                 run(buf, 0);
         }
