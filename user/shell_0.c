@@ -64,31 +64,19 @@ void repeat_w()
 
 void a()
 {
-    for (;;)
-    {
-        printf("pipe chain!\n");
-        yield();
-    }
+	printf("pipe chain!\n");
 }
 
 void b()
 {
     char line[1024];
-    for (;;)
-    {
-        printf("%s", gets(line));
-        yield();
-    }
+	printf("%s\n", gets(line));
 }
 
 void c()
 {
     char line[1024];
-    for (;;)
-    {
-        printf("%s", gets(line));
-        yield();
-    }
+	printf("%s", gets(line));
 }
 
 // 复制line里的第idx个文件名到filename中
@@ -247,14 +235,13 @@ void pipe_3(usr_prog p1, usr_prog p2, usr_prog p3)
         close(pipefd1[0]);
         if (dup2(pipefd1[1], STD_OUT) == -1)
             printf("dup2 failed\n");
-        p1();
+		p1();
+		waity(NULL);
     }
     else if (cpid1 == 0)
     {
         printf("son\n");
         close(pipefd1[1]);
-        if (dup2(pipefd1[0], STD_IN) == -1)
-            printf("dup2 failed\n");
 
         int pipefd2[2];
         if (pipe(pipefd2) == -1)
@@ -265,19 +252,24 @@ void pipe_3(usr_prog p1, usr_prog p2, usr_prog p3)
         int cpid2 = fork();
         if (cpid2 > 0)
         {
+			char line[1024];	
             printf("father, son:%d\n", cpid2);
             close(pipefd2[0]);
+			if (dup2(pipefd1[0], STD_IN) == -1)
+				printf("dup2 failed\n");
             if (dup2(pipefd2[1], STD_OUT) == -1)
                 printf("dup2 failed\n");
-            p2();
+			p2();
+			waity(NULL);
         }
         else if (cpid2 == 0)
         {
+			char line[1024];
             printf("son\n");
             close(pipefd2[1]);
             if (dup2(pipefd2[0], STD_IN) == -1)
                 printf("dup2 failed\n");
-            p3();
+			p3();
         }
     }
 }
