@@ -70,13 +70,15 @@ void a()
 void b()
 {
     char line[1024];
+	memset(line, 0, 1024);
 	printf("%s\n", gets(line));
 }
 
 void c()
 {
     char line[1024];
-	printf("%s", gets(line));
+	memset(line, 0, 1024);
+	printf("%s\n", gets(line));
 }
 
 // 复制line里的第idx个文件名到filename中
@@ -237,6 +239,7 @@ void pipe_3(usr_prog p1, usr_prog p2, usr_prog p3)
             printf("dup2 failed\n");
 		p1();
 		waity(NULL);
+		exit(0);
     }
     else if (cpid1 == 0)
     {
@@ -261,6 +264,7 @@ void pipe_3(usr_prog p1, usr_prog p2, usr_prog p3)
                 printf("dup2 failed\n");
 			p2();
 			waity(NULL);
+			exit(0);
         }
         else if (cpid2 == 0)
         {
@@ -270,6 +274,7 @@ void pipe_3(usr_prog p1, usr_prog p2, usr_prog p3)
             if (dup2(pipefd2[0], STD_IN) == -1)
                 printf("dup2 failed\n");
 			p3();
+			exit(0);
         }
     }
 }
