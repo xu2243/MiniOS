@@ -149,7 +149,7 @@ void clear_kernel_pagepte_low();		//add by visual 2016.5.12
 
 /* pipe.c & fs.c */
 int pipe(int pipefd[2]);
-int mkfifo(int *path);
+int mkfifo(char *path);
 int ls();
 int dup2(int oldfd, int newfd);
 int waity(int *wstatus);

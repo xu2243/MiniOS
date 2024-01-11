@@ -19,16 +19,23 @@ void exec_eof(char *eof)
 }
 
 void hello(){
-	printf("Hello world!\n");
-	yield();
+  int i;
+	for(i=0;i<10;i++){
+		printf("Hello world!\n");
+		yield();
+	}
+  exit(0);
 }
 
 void says(){
 	char line[1024];
-	for(;;){
+  int i;
+	for(i=0;i<10;i++){
 		gets(line);
 		printf("pipe says:%s\n", line);
+		yield();
 	}
+  exit(0);
 }
 
 void repeat_r(){
@@ -71,6 +78,7 @@ void c(){
 		yield();
 	}
 }
+
 
 // 复制line里的第idx个文件名到filename中
 void get_filename(char *filename, char *line, int idx)
@@ -251,6 +259,26 @@ void pipe_3(usr_prog p1, usr_prog p2, usr_prog p3){
 	}
 }
 
+void fifo_test(){
+  if(mkfifo("/fifo") != 0)
+    printf("mkfifo failed!\n");
+  int cpid = fork();
+  if(cpid>0){
+    int fd = open("pipefifo/fifo", O_RDWR);
+    for(;;){
+      write(fd, "hi son", 6);
+      yield();
+    }
+  }else {
+    int fd = open("pipefifo/fifo", O_RDWR);
+    char line[1024];
+    for(;;){
+      read(fd, line, 1);
+      printf("%c", *line);
+    }
+  }
+}
+
 void run(char* line, int tn){
 	int cpid = fork();
 	if(cpid > 0){
@@ -273,6 +301,9 @@ void run(char* line, int tn){
 			break;
 		case 3:
 			pipe_3(a, b, c);
+			break;
+		case 4:
+			fifo_test();
 			break;
 		}
 	}
@@ -303,6 +334,8 @@ int main(int arg, char *argv[])
               run("repeat_w | repeat_r", 2);
             else if (strncmp("t3", buf, 2) == 0) 
               run("a | b | c", 3);
+            else if (strncmp("fifo", buf, 4) == 0) 
+              run("fifo test", 4);
             else
               run(buf, 0);
         }
