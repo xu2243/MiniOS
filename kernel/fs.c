@@ -614,8 +614,9 @@ static int search_file(char * path)
 		RD_SECT(dir_inode->i_dev, dir_blk0_nr + i, fsbuf);	//modified by mingxuan 2019-5-20
 		pde = (struct dir_entry *)fsbuf;
 		for (j = 0; j < SECTOR_SIZE / DIR_ENTRY_SIZE; j++,pde++) {
+            // kprintf("[reading]");
             if (pde->inode_nr == 0) continue;
-            // if(((filename[0] == 's' && filename[1] == 'a') || filename[0] == 'h') && pde->name[0] != 'd') kprintf("[%c %s]", filename[0], pde->name);
+            if(((filename[0] == 's' && filename[1] == 'a') || filename[0] == 'h') && pde->name[0] != 'd') kprintf("[%c %s]", filename[0], pde->name);
 			if (memcmp(filename, pde->name, MAX_FILENAME_LEN) == 0)
 				return pde->inode_nr;
 			if (++m > nr_dir_entries)
@@ -1509,6 +1510,7 @@ static int do_unlink(MESSAGE *fs_msg)
 		return -1;
 	}
 
+    // kprintf("[%s]", pathname);
 	int inode_nr = search_file(pathname);
 	if (inode_nr == INVALID_INODE) {	/* file not found */
 		kprintf("FS::do_unlink():: search_file() returns invalid inode: %s\n", pathname);

@@ -442,6 +442,7 @@ int do_mkfifo(const char *path) {
     fifoinode->i_start_sect = free_sect_nr;
 	fifoinode->i_nr_sects = NR_DEFAULT_FILE_SECTS;
     fifoinode->i_num = inode_nr;
+    fifoinode->i_cnt = 0;
 
     /* update dir inode */
 	sync_inode(fifoinode);
