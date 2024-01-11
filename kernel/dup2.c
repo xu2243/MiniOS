@@ -14,13 +14,10 @@
 
 static int do_dup2(int oldfd, int newfd) {
     if (p_proc_current->task.filp[newfd]->flag == 1) {
-        // kprintf("newfd:%d", newfd);
         if (do_vclose(newfd) == -1) {
             kprintf("close error");
             return -1;
         }
-        // else
-        //     kprintf("newfd close");
     }
     p_proc_current->task.filp[newfd] = p_proc_current->task.filp[oldfd];
     return 0;

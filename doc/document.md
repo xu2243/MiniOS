@@ -421,19 +421,18 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
 
 这些bug包括但不限于（写的时候只记得这么多）：
 
-没有目录管理，明明有I_DIRECTORY的类型，但是没有目录相关的调用，所有的查询读写操作直接与硬盘交互，只有一个根目录；
+1. 没有目录管理，明明有`I_DIRECTORY`的类型，但是没有目录相关的调用，所有的查询读写操作直接与硬盘交互，只有一个根目录；
 
-调用关系混乱，直接越过hd接口调用hd_service更底层的函数hd_rdwt，实现了一个'完全串行的文件读写'；
+2. 调用关系混乱，直接越过hd接口调用`hd_service`更底层的函数`hd_rdwt`，实现了一个'完全串行的文件读写'；
 
-没有时间中断调度，没有wait和exit等进程管理函数，进程状态定义甚至没有zombie；
+3. 没有时间中断调度，没有wait和exit等进程管理函数，进程状态定义甚至没有`zombie`；
+4. 文件的读写标志只定义了`O_CREAT` 和 `O_RDWR`，没有定义只读和只写等等标志。
+5. 会修改调用者参数的逆天函数；
 
-在read和wiite的
+6. 写了但是不用的文件，写了但是不用的函数，写了但是不用的字段，你甚至不知道这个字段能取什么值；
 
-会修改调用者参数的逆天函数；
+7. fork中若干bug，exec中若干bug；
 
-写了但是不用的文件，写了但是不用的函数，写了但是不用的字段，你甚至不知道这个字段能取什么值；
-
-fork中若干bug，exec中若干bug；
 
 ### 管道资源管理 - 存储与释放
 
@@ -572,3 +571,23 @@ for (i = 0; i < NR_FILES; i++)
     }
 }
 ```
+
+### DUP2 - 重定向
+
+dup2函数，把指定的newfd也指向oldfd指向的文件，也就是说，执行完dup2之后，有newfd和oldfd同时指向同一个文件，**共享文件偏移量和文件状态**。
+
+有了前面的铺垫之后，dup2就是一个简单的指针转移：
+
+```c
+static int do_dup2(int oldfd, int newfd) {
+    if (p_proc_current->task.filp[newfd]->flag == 1) {
+        if (do_vclose(newfd) == -1) {
+            kprintf("close error");
+            return -1;
+        }
+    }
+    p_proc_current->task.filp[newfd] = p_proc_current->task.filp[oldfd];
+    return 0;
+}
+```
+
