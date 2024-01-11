@@ -90,9 +90,9 @@ static int fork_fd_cpy(struct file_desc **filp) {
         filp[i] = (struct file_desc*)(&f_desc_table[fd_nr]);
         filp[i]->fd_node.fd_inode->i_cnt++;
         if (filp[i]->fd_node.fd_inode->i_mode == I_NAMED_PIPE || filp[i]->fd_node.fd_inode->i_mode == I_UNAMED_PIPE) {
-            if (filp[i]->fd_mode == WRITE_MODE)
+            if (filp[i]->fd_mode == O_WRONLY)
                 filp[i]->fd_node.fd_inode->i_pipe->w_counter++;
-            else if(filp[i]->fd_mode == READ_MODE)
+            else if(filp[i]->fd_mode == O_RDONLY)
                 filp[i]->fd_node.fd_inode->i_pipe->r_counter++;
             else {
                 kprintf("bad mode! ");

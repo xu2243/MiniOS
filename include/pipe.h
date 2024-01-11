@@ -77,6 +77,7 @@ int pipe_read(int fd, void *buf, int count);
 int pipe_write(int fd, const void *buf, int count);
 int pipe_close(int fd);
 int pipe_info_release(struct pipe_inode_info *pipe_info);
+struct pipe_inode_info *alloc_pipe_info();
 // int fifo_unlink(const char *path);
 
 

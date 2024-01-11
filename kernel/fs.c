@@ -122,6 +122,7 @@ void init_fs()
 	}
 
 	root_inode = get_inode(orange_dev, ROOT_INODE);	// modified by mingxuan 2020-10-27
+    root_inode->i_cnt++;
 }
 
 /*****************************************************************************
@@ -459,6 +460,7 @@ static int do_open(MESSAGE *fs_msg)
 		if (strip_path(filename, pathname, &dir_inode) != 0)
 			return -1;
 		pin = get_inode(dir_inode->i_dev, inode_nr); //modified by mingxuan 2019-5-20
+        pin->i_cnt++;
 	}
 
 	if (pin) {
@@ -616,7 +618,7 @@ static int search_file(char * path)
 		for (j = 0; j < SECTOR_SIZE / DIR_ENTRY_SIZE; j++,pde++) {
             // kprintf("[reading]");
             if (pde->inode_nr == 0) continue;
-            if(((filename[0] == 's' && filename[1] == 'a') || filename[0] == 'h') && pde->name[0] != 'd') kprintf("[%c %s]", filename[0], pde->name);
+            // if(((filename[0] == 's' && filename[1] == 'a') || filename[0] == 'h') && pde->name[0] != 'd') kprintf("[%c %s]", filename[0], pde->name);
 			if (memcmp(filename, pde->name, MAX_FILENAME_LEN) == 0)
 				return pde->inode_nr;
 			if (++m > nr_dir_entries)
@@ -779,7 +781,7 @@ struct inode * get_inode(int dev, int num)
              */
 			if ((p->i_num == num)) {
 				/* this is the inode we want */
-				p->i_cnt++;
+				// p->i_cnt++;
                 if (!p)
 		            panic("the inode table is full");
 				return p;
@@ -796,7 +798,7 @@ struct inode * get_inode(int dev, int num)
 
 	q->i_dev = dev;
 	q->i_num = num;
-	q->i_cnt = 1;
+	q->i_cnt = 0;
 
 	struct super_block * sb = get_super_block(dev);
 	int blk_nr = 1 + 1 + sb->nr_imap_sects + sb->nr_smap_sects + ((num - 1) / (SECTOR_SIZE / INODE_SIZE));
@@ -810,6 +812,11 @@ struct inode * get_inode(int dev, int num)
 	q->i_size = pinode->i_size;
 	q->i_start_sect = pinode->i_start_sect;
 	q->i_nr_sects = pinode->i_nr_sects;
+
+    if (q->i_mode == I_NAMED_PIPE) {
+        q->i_pipe = alloc_pipe_info();
+    }
+
 	return q;
 }
 
@@ -825,7 +832,7 @@ static struct inode * get_inode_sched(int dev, int num)
 		if (p->i_cnt) {	/* not a free slot */
 			if ((p->i_num == num)) {
 				/* this is the inode we want */
-				p->i_cnt++;
+				// p->i_cnt++;
 				return p;
 			}
 		}
@@ -1524,14 +1531,21 @@ static int do_unlink(MESSAGE *fs_msg)
 
 	struct inode * pin = get_inode_sched(dir_inode->i_dev, inode_nr);	//modified by xw, 18/8/28
 
+    if (pin->i_mode == I_NAMED_PIPE) {
+        char fsbuf[SECTOR_SIZE];	//local array, to substitute global fsbuf. added by xw, 18/12/27
+
+        release_imap_bit(pin, fsbuf);
+
+        release_dir_entry(dir_inode, fsbuf, inode_nr);
+        return 0;
+    }
+
     if (pin->i_cnt > 1) {	/* the file was opened */
 		kprintf("cannot remove file %s, because pin->i_cnt is %d\n", pathname, pin->i_cnt);
 		return -1;
 	}
 
-    if (pin->i_mode == I_NAMED_PIPE) {
-        pipe_info_release(pin->i_pipe);
-	} else if (pin->i_mode != I_REGULAR) { /* can only remove regular files */
+    if (pin->i_mode != I_REGULAR) { /* can only remove regular files */
 		kprintf("cannot remove file %s, because it is not a regular file.\n", pathname);
 		return -1;
 	}

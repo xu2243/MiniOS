@@ -122,6 +122,10 @@ from father:hello, my son!
 
 这种通信形式在类Unix操作系统中被统一进了文件系统，通信就是发送消息和接收消息的过程，本质和文件读写一样，因此管道通信的接口也就被统一成了对**管道类文件**的读写。既然是文件，那么就需要按 **文件描述符file_descreptor** 和 **文件节点inode** 的方式来管理。
 
+但是它实际读写的形式和正常的文件是不一样的，正常的文件在硬盘中有指定的存储位置，但是pipe没有，它所有的数据都存储在内核的缓冲区中，它和普通文件的共同点就是有**文件系统形式的接口**，但所有数据一旦关机就会消失。
+
+所以我们需要给inode添加新字段，标识pipe需要的信息，重写pipe的读写操作。
+
 ```c
 // in fs_misc.h
 /**
@@ -218,19 +222,119 @@ int pipe_read(int fd, void *buf, int count) {
 }
 ```
 
-#### 读写调度
-
-
-
-
-
-
-
-
-
 #### 等待队列
 
+`wait_queue_head_t` 是一个控制进程访问顺序的队列，每个希望对这个管道进行访问（读写）的进程，都会先进入管道的等待队列：`rd_wait` `wr_wait`。
 
+这是一个链表实现的队列结构，先进入管道的进程会优先对管道进行访问。没有排在队头的进程则会被阻塞，直到前面的队头依次离开，排队排到自己，这个结构保证了每个进程都能有机会访问到管道。当然，在加入队列之前，这个进程首先要占用管道的锁，保证单独访问资源。
+
+链表采用linux的list模板。
+
+```c
+typedef struct wait_queue_head{
+    struct list_head wait_queue;
+    PROCESS *proc;
+} wait_queue_head_t;
+```
+
+这个等待队列提供了相应的接口，方便我们进行进程管理：
+
+```c
+struct wait_queue_head_t;
+
+void init_queue_head(wait_queue_head_t *wq) {
+    INIT_LIST_HEAD(&wq->wait_queue);
+}
+
+PROCESS *wait_queue_head(wait_queue_head_t *wq) {
+    if (!list_empty(&wq->wait_queue)) {
+        wait_queue_head_t *p = list_first_entry(&wq->wait_queue, wait_queue_head_t, wait_queue);
+        return p->proc;
+    }
+    return NULL;
+}
+
+void wait_queue_push(wait_queue_head_t *wq, PROCESS *proc) {
+    wait_queue_head_t *p = (wait_queue_head_t *)K_PHY2LIN(sys_kmalloc(sizeof(wait_queue_head_t)));
+    p->proc = proc;
+    list_add_tail(&p->wait_queue, &wq->wait_queue);
+}
+
+void wait_queue_pop(wait_queue_head_t *wq) {
+    if (!list_empty(&wq->wait_queue)) {
+        wait_queue_head_t *p = list_first_entry(&wq->wait_queue, wait_queue_head_t, wait_queue);
+        list_del(&p->wait_queue);
+        do_free((u32)p, sizeof(wait_queue_head_t)); // 在这里释放内存
+    }
+}
+
+int wait_queue_is_empty(wait_queue_head_t *wq) {
+    return list_empty(&wq->wait_queue);
+}
+```
+
+#### 多进程读写调度
+
+读写调度本质是一个状态机，通过对pipeinfo里的队列首尾指针，我们检查buffer的读写情况：
+
+① 如果**写满**或者**读空**了，也就是 `tail == head`：那么我们需要：
+
+- **释放锁**
+- **阻塞当前进程**
+- **唤醒另一个队列的队列头（如果有）**
+- **等待下一次调度时，尝试占用锁并重复读写操作**
+
+② 如果**完成读写**，也就是 **实际读写字节** 达到指定长度，那么：
+
+- **退出读（写）队列**
+- **唤醒另一个队列的队列头（如果有）**
+- **释放锁，退出**
+
+③ 如果**另一个队列为空**，且无法进行读写（写满或者读空），那么肯定不能一直阻塞当前进程，不然会永远等待下去，因为对方不存在：
+
+- **释放锁，直接退出**，返回实际读写字节数（可能小于调用时的长度参数）
+
+```c
+int pipe_write(int fd, const void *buf, int count) {    
+	
+    /* other code */
+    
+	acquire(&pipe_info->mutex);
+
+    // memcpy from pipe_info->bufs to user buffer
+    unsigned int ret = 0;
+
+    while (1) {
+        if (ret == count) {
+            wait_queue_pop(&pipe_info->wr_wait);
+            wait_queue_head(&file->fd_node.fd_inode->i_pipe->rd_wait)->task.stat = READY;
+            pipe_info->writers--;
+            release(&pipe_info->mutex);
+            return ret;
+        } else if (pipe_info->max_usage < PAGE_SIZE) {
+            *(char *)(pipe_info->bufs + (pipe_info->tail % PAGE_SIZE)) = *(char *)(buf + ret);
+            pipe_info->tail++;
+            pipe_info->max_usage++;
+            pipe_info->tail %= PAGE_SIZE;
+            ret++;
+        } else {
+            if (pipe_info->r_counter == 0) {
+                pipe_info->readers--;
+                release(&pipe_info->mutex);
+                return ret;
+            }
+            wait_queue_head(&file->fd_node.fd_inode->i_pipe->rd_wait)->task.stat = READY;
+            release(&pipe_info->mutex);
+            p_proc_current->task.stat = SLEEPING;
+		    sched();
+
+            acquire(&pipe_info->mutex);
+        }
+    }
+    
+    /* other code */
+}
+```
 
 ### 系统调用 - 管道文件读写接口
 
@@ -256,7 +360,7 @@ int do_vread(int fd, char *buf, int count) {
 }
 ```
 
-file_op定义如下：
+file_op定义如下，作为文件系统对外的接口：
 
 ```c
 struct file_op{
@@ -285,14 +389,16 @@ f_op_table[3].read = pipe_read;
 f_op_table[3].unlink = pipe_unlink;
 ```
 
-新增了一个虚拟文件系统pipefifo：
+并且新增了一个虚拟文件系统pipefifo：
 
 ```c
 vfs_table[PIPEFIFO].fs_name = "pipefifo"; 
 vfs_table[PIPEFIFO].op = &f_op_table[3];
 ```
 
-但是这在miniOS中并不是一个很融洽的设计，因为我们的fifo最后应该出现在orange的文件目录里，而orange也甚至还给我们的fifo关键字留了一个宏定义（这是一个仿照`linux-0.12`的宏定义设计）！
+但是这在miniOS中并不是一个很融洽的设计，因为我们的fifo最后应该出现在orange的文件目录里。
+
+而orange也贴心地还给我们的fifo关键字留了一个宏定义（这是一个仿照`linux-0.12`的宏定义设计）！
 
 ```c
 /* fs_const.h */
@@ -307,13 +413,165 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
 
 也就是说，orange的文件系统用inode的i_mode字段把文件分为了：目录文件，常规文件，块设备文件，字符设备文件，fifo文件等。
 
-虽然我们的pipe
+我们的pipe和fifo现在也应该被归入orange的文件设备中，使用orange对应的`file_op` ，即 `real_open`  和 `real_unlink` 等接口。
 
+于是我们修改了 `fs.c ` 中对应的函数文件读写函数，如果发现这个inode是pipe类型，那么转接到我们的`pipe_read` 和 `pipe_write` ，因为我们实际上并没有真的读写硬盘，而是进行pipe的缓冲区操作。
 
+在这个过程中，我们修复（有选择的忽略）了若干miniOS的文件系统的bug，因为精力有限，没有进行大范围的重构。只是在有限的修改下保证我们的pipe能正常运行。
 
+这些bug包括但不限于（写的时候只记得这么多）：
 
+没有目录管理，明明有I_DIRECTORY的类型，但是没有目录相关的调用，所有的查询读写操作直接与硬盘交互，只有一个根目录；
 
+调用关系混乱，直接越过hd接口调用hd_service更底层的函数hd_rdwt，实现了一个'完全串行的文件读写'；
 
+没有时间中断调度，没有wait和exit等进程管理函数，进程状态定义甚至没有zombie；
+
+在read和wiite的
+
+会修改调用者参数的逆天函数；
+
+写了但是不用的文件，写了但是不用的函数，写了但是不用的字段，你甚至不知道这个字段能取什么值；
+
+fork中若干bug，exec中若干bug；
+
+### 管道资源管理 - 存储与释放
+
+#### 内核缓冲区申请
+
+因为管道的数据不是存储在硬盘中，而是在内核的缓冲区中，那么我们区别于正常的文件，需要额外申请内核空间用于存储pipe额外的信息和缓冲区。
+
+对于`pipe`来说，不仅要申请内核缓冲区，还要申请存储自身的空间。因为`pipe`不能通过文件路径索引到，没有文件名，也没有存储地址，只由`pipe`系统调用创建，供父子进程间使用，进程退出后直接销毁，所以需要额外的管理方式。`pipe`的`inode`没有编号，不在`inodemap`中，故需要自己申请空间。
+
+```c
+struct pipe_inode_info *alloc_pipe_info() {
+    /* 申请pipe_inode的内存 */
+    struct pipe_inode_info *pipe = (void*)K_PHY2LIN(sys_kmalloc(sizeof(struct pipe_inode_info)));
+    memset(pipe, 0, sizeof(struct pipe_inode_info));
+    pipe->ring_size = PIPE_BUF_PAGE_NUM * PAGE_SIZE;
+    pipe->user = p_proc_current;
+    
+    /* 初始化pipe锁 */
+    initlock(&pipe->mutex, "PIPE_LOCK");
+	
+    /* 初始化进程队列 */
+    init_queue_head(&pipe->rd_wait);
+    init_queue_head(&pipe->wr_wait);
+
+    pipe->rd_wait.proc = NULL;
+    pipe->wr_wait.proc = NULL;
+	
+    /* 申请内核缓冲区 */
+    pipe->bufs = (void *)K_PHY2LIN((sys_kmalloc_4k()));
+    return pipe;
+}
+```
+
+#### 内核缓冲区释放
+
+这是对管道通用的释放接口，无论是`pipe`还是`fifo`都需要释放这段内核缓冲区。
+
+```c
+int pipe_info_release(struct pipe_inode_info *pipe_info) {
+    if (!wait_queue_is_empty(&pipe_info->rd_wait) || !wait_queue_is_empty(&pipe_info->wr_wait)) {
+        kprintf("[release failed, its still being reading!]");
+        return -1;
+    }
+    do_free((unsigned)pipe_info->bufs, pipe_info->ring_size);
+    do_free((unsigned)pipe_info, sizeof(struct pipe_inode_info));
+    return 0;
+}
+```
+
+#### CLOSE行为和UNLINK行为
+
+`pipe`的`close`行为会关闭对应的文件描述符，并操作inode当中记录的数据。当`pipe_inode`的所有文件描述符都关闭后，自动释放`pipe`的相关资源。
+
+因为fd在内存中有一个固定大小的table，不需要我们释放，只需要设置指针即可。
+
+```c
+int pipe_close(int fd) {
+    struct file_desc *pfile = p_proc_current->task.filp[fd];
+    struct inode *pipe_inode = pfile->fd_node.fd_inode;
+    struct pipe_inode_info *pipe_info = pfile->fd_node.fd_inode->i_pipe;
+    pipe_inode->i_cnt--;
+    if (pfile->fd_mode == O_RDONLY) pipe_info->r_counter--;
+    else if (pfile->fd_mode == O_WRONLY) pipe_info->w_counter--;
+    else {
+        pipe_info->r_counter--;
+        pipe_info->w_counter--;
+    } 
+
+    if (pipe_inode->i_cnt == 0) {
+        pipe_info_release(pipe_inode->i_pipe);
+        if (pipe_inode->i_mode == I_NAMED_PIPE) {
+            pipe_inode->i_mode = 0;
+            pipe_inode->i_size = 0;
+            pipe_inode->i_start_sect = 0;
+            pipe_inode->i_nr_sects = 0;
+            sync_inode(pipe_inode);
+        }
+    }
+    p_proc_current->task.filp[fd]->fd_node.fd_inode = 0;
+    p_proc_current->task.filp[fd]->flag = 0;
+    p_proc_current->task.filp[fd] = 0;
+    return 0;
+}
+```
+
+`fifo`的`close`行为和pipe完全一致（除了需要额外释放inode表资源），都会在进程结束后释放缓冲区资源，但是fifo在硬盘中有目录项数据，只能被另外的系统调用释放。
+
+`fifo`的删除由`unlink()`函数触发，也就是shell中的`rm [path]`指令。
+
+**注意**：unlink会删除正在被读写的fifo文件项，此时fifo文件被删除，无法再通过open打开。但是正在被读写的fifo资源仍然在内存当中，**可以被进程正常读写**，只有被close时资源才会被释放。**换句话说，open和close才负责fifo的资源分配，mkfifo和unlink只负责创建和删除对应的目录项和文件记录。**
+
+```c
+/* 在open调用的get_inode函数当中，如果打开的文件时fifo，且没有在内存中找到对应的inode，则创建对应的inode，并申请pipe缓存资源 */
+if (q->i_mode == I_NAMED_PIPE) {
+    q->i_pipe = alloc_pipe_info();
+}
+```
+
+```c
+/* 在unlink中，如果打开的文件时fifo，我们直接释放其对应的目录项，但不删除其inode */
+if (pin->i_mode == I_NAMED_PIPE) {
+    char fsbuf[SECTOR_SIZE];	//local array, to substitute global fsbuf. added by xw, 18/12/27
+
+    release_imap_bit(pin, fsbuf);
+
+    release_dir_entry(dir_inode, fsbuf, inode_nr);
+    return 0;
+}
+```
+
+#### 等待队列的资源释放
+
+等待队列申请的资源也会在队列操作中对称释放。
+
+```c
+void wait_queue_pop(wait_queue_head_t *wq) {
+    if (!list_empty(&wq->wait_queue)) {
+        wait_queue_head_t *p = list_first_entry(&wq->wait_queue, wait_queue_head_t, wait_queue);
+        list_del(&p->wait_queue);
+        do_free((u32)p, sizeof(wait_queue_head_t)); // 在这里释放内存
+    }
+}
+```
+
+#### 没有调用close而exit退出的进程
+
+`exit` 函数会处理所有未关闭的文件描述符。由于pipe和fifo调用的释放都是在close中统一管理的，所以不会出现未释放。
+
+```c
+/* exit.c */
+for (i = 0; i < NR_FILES; i++)
+{
+    if (p_proc_current->task.filp[i]->flag == 1)
+    {
+        do_vclose(i);
+    }
+}
+```
 
 ### 单元测试
 

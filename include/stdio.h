@@ -28,6 +28,8 @@ void udisp_str(char* arg);
 #define	MAX_PATH	128
 #define	O_CREAT		1
 #define	O_RDWR		2
+#define O_RDONLY    3
+#define O_WRONLY    4
 #define SEEK_SET	1
 #define SEEK_CUR	2
 #define SEEK_END	3

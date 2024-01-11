@@ -115,12 +115,11 @@ struct pipe_inode_info *alloc_pipe_info() {
 }
 
 
-int get_pipe_inode(int i_mode, struct inode *inode) {
+int get_pipe_inode(struct inode *inode) {
     struct pipe_inode_info *pipe = alloc_pipe_info();
 
-    inode->i_mode = i_mode;
-    inode->i_dev = 800;
-    // inode->i_num = 0;
+    inode->i_dev = 0;
+    inode->i_cnt = 1;
     inode->i_pipe = pipe;
 
     return 0;
@@ -138,9 +137,9 @@ int get_available_proc_fd() {
 }
 
 
-/* mode == READ_MODE or WRITE_MODE */
+/* mode == O_RDONLY or O_WRONLY */
 int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
-    if (mode != READ_MODE && mode != WRITE_MODE) {
+    if (mode != O_RDONLY && mode != O_WRONLY) {
         return -1;
     }
     int f_table_idx = get_available_fd_table();
@@ -170,8 +169,13 @@ int create_pipe(int *pipefd, struct inode *pipe_inode, int mode) {
     // pipe_inode->i_pipe->files++;
     pipe_inode->i_cnt++;
 
-    if (mode == READ_MODE) pipe_inode->i_pipe->r_counter++;
-    else if (mode == READ_MODE) pipe_inode->i_pipe->w_counter++;
+    if (mode == O_RDONLY) pipe_inode->i_pipe->r_counter++;
+    else if (mode == O_RDONLY) pipe_inode->i_pipe->w_counter++;
+    else {
+        // O_RDWR
+        pipe_inode->i_pipe->r_counter++;
+        pipe_inode->i_pipe->w_counter++;
+    }
 
     // readers and writers should be added by their own 
     // pipe_inode->i_pipe->readers++;
@@ -205,13 +209,14 @@ int do_pipe(int *pipefd) {
     * an inode number and have allocated memory for it using malloc 
     * independently, instead of taking the inode table in fs.c.
     */
-    get_pipe_inode(I_UNAMED_PIPE, pipe_inode);
-    if (create_pipe(&pipefd[0], pipe_inode, READ_MODE) == -1) {
+    get_pipe_inode(pipe_inode);
+    pipe_inode->i_mode = I_UNAMED_PIPE;
+    if (create_pipe(&pipefd[0], pipe_inode, O_RDONLY) == -1) {
         /* error handler */
         kprintf("pipe failed!");
         return -1;
     }
-    if (create_pipe(&pipefd[1], pipe_inode, WRITE_MODE) == -1) {
+    if (create_pipe(&pipefd[1], pipe_inode, O_WRONLY) == -1) {
         /* error handler */
         kprintf("pipe failed!");
         return -1;
@@ -234,7 +239,7 @@ int pipe_read(int fd, void *buf, int count) {
         return -1;
     }
 
-    if (file->fd_mode != READ_MODE && file->fd_mode != O_RDWR) {
+    if (file->fd_mode != O_RDONLY && file->fd_mode != O_RDWR) {
         kprintf("[Bad file descriptor]");
         return -1;
     }
@@ -319,7 +324,7 @@ int pipe_write(int fd, const void *buf, int count) {
         return -1;
     }
 
-    if (file->fd_mode != WRITE_MODE && file->fd_mode != O_RDWR) {
+    if (file->fd_mode != O_WRONLY && file->fd_mode != O_RDWR) {
         kprintf("[Bad file descriptor]");
         return -1;
     }
@@ -390,6 +395,10 @@ int pipe_write(int fd, const void *buf, int count) {
 
 int pipe_info_release(struct pipe_inode_info *pipe_info) {
     // struct pipe_inode_info *pipe_info = pipe_inode->i_pipe;
+    if (!wait_queue_is_empty(&pipe_info->rd_wait) || !wait_queue_is_empty(&pipe_info->wr_wait)) {
+        kprintf("[release failed, its still being reading!]");
+        return -1;
+    }
     do_free((unsigned)pipe_info->bufs, pipe_info->ring_size);
     do_free((unsigned)pipe_info, sizeof(struct pipe_inode_info));
     return 0;
@@ -399,15 +408,23 @@ int pipe_close(int fd) {
     struct file_desc *pfile = p_proc_current->task.filp[fd];
     struct inode *pipe_inode = pfile->fd_node.fd_inode;
     struct pipe_inode_info *pipe_info = pfile->fd_node.fd_inode->i_pipe;
-    // kprintf("(%x)", pipe_inode);
-    // pipe_info->files--;
     pipe_inode->i_cnt--;
-    // kprintf("(%d)", pipe_inode->i_cnt);
-    if (pfile->fd_mode == READ_MODE) pipe_info->r_counter--;
-    if (pfile->fd_mode == WRITE_MODE) pipe_info->w_counter--;
+    if (pfile->fd_mode == O_RDONLY) pipe_info->r_counter--;
+    else if (pfile->fd_mode == O_WRONLY) pipe_info->w_counter--;
+    else {
+        pipe_info->r_counter--;
+        pipe_info->w_counter--;
+    } 
 
-    if (pipe_inode->i_cnt == 0) {
+    if (pipe_inode->i_cnt == 1) {
         pipe_info_release(pipe_inode->i_pipe);
+        if (pipe_inode->i_mode == I_NAMED_PIPE) {
+            pipe_inode->i_mode = 0;
+            pipe_inode->i_size = 0;
+            pipe_inode->i_start_sect = 0;
+            pipe_inode->i_nr_sects = 0;
+            sync_inode(pipe_inode);
+        }
     }
     p_proc_current->task.filp[fd]->fd_node.fd_inode = 0;
     p_proc_current->task.filp[fd]->flag = 0;
@@ -437,12 +454,13 @@ int do_mkfifo(const char *path) {
 
     // kprintf("(%s:%d)", filename, inode_nr);
 
-    get_pipe_inode(I_NAMED_PIPE, fifoinode);
+    // get_pipe_inode(I_NAMED_PIPE, fifoinode);
+    fifoinode->i_mode = I_NAMED_PIPE;
 
     fifoinode->i_start_sect = free_sect_nr;
 	fifoinode->i_nr_sects = NR_DEFAULT_FILE_SECTS;
     fifoinode->i_num = inode_nr;
-    fifoinode->i_cnt = 0;
+    fifoinode->i_cnt = 1;
 
     /* update dir inode */
 	sync_inode(fifoinode);
