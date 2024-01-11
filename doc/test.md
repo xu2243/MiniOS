@@ -556,10 +556,20 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
    ```
 
    命名管道由系统调用`mkfifo(char* path)`建立。
-   
+
    **理论输出**：不断输出`hear from fa:hi son`
-   
+
    **流程**：`mkfifo`建立有名管道后，`fork`后父子进程分别打开该管道，并且利用该管道和`read & write`进行进程间通信：父进程向管道写端写入`hi son`，在`yield`后进入子进程，子进程从管道读端读入管道中的`hi son`并输出，然后再`yield`，进入父进程，开始循环。
+
+6. shell中的`mkfifo`与`rm`测试
+
+   mkfifo一般以shell中命令的形式存在，我们在shell中也实现了相关命令。依次执行下面的命令：
+
+   `mkfifo /testfifo`
+
+   `rm orange/testfifo`
+
+   分别可以创建一个有名管道`testfifo`以及将它移除；途中可以用另一个shell中的命令`ls`来查看文件系统中的文件，以查看建立和删除的结果。
 
 
 ### 综合测试
