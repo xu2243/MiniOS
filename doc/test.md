@@ -112,7 +112,7 @@ from father:hello, my son!
 
 ## 实现细节
 
-### 系统分析
+### PIPE详解 - 一个虚拟文件系统
 
 进入实现环节，我们不仅需要熟悉系统调用的功能，还要深入其中了解其实现细节。
 
@@ -120,7 +120,7 @@ from father:hello, my son!
 
 向管道（共享文件）提供输入的发送进程（即写进程），以字符流形式将大量的数据送入管道；而接收管道输出的接收进程（即读进程），可从管道中接收数据。由于发送进程和接收进程是利用管道进行通信的，故又称管道通信。
 
-这种通信形式在类Unix操作系统中被统一进了文件系统，通信就是发送消息和接收消息的过程，本质和文件读写一样，因此管道通信也就被统一成了对**管道类文件**的读写。既然是文件，那么就需要按**文件描述符**和**inode**的方式来管理。
+这种通信形式在类Unix操作系统中被统一进了文件系统，通信就是发送消息和接收消息的过程，本质和文件读写一样，因此管道通信的接口也就被统一成了对**管道类文件**的读写。既然是文件，那么就需要按 **文件描述符file_descreptor** 和 **文件节点inode** 的方式来管理。
 
 ```c
 // in fs_misc.h
@@ -151,10 +151,11 @@ struct inode {
 };
 ```
 
-我们在pipe_inode里添加了一个字段，这是一个从linux的定义中简化过来的版本：
+我们在pipe_inode里添加了一个字段，这是一个从linux的定义中简化过来的版本，以表示pipe类型的inode：
 
-```
+```c
 struct pipe_inode_info	*i_pipe; 
+/* in  */
 
 /**
  *	struct pipe_inode_info - Simplified version of pipe, ported from Linux.
@@ -163,22 +164,15 @@ struct pipe_inode_info	*i_pipe;
  *	@wr_wait: writer wait point in case of full pipe
  *	@head: The point of buffer production
  *	@tail: The point of buffer consumption
- *	@note_loss: The next read() should insert a data-lost message
  *	@max_usage: how many buf i ve used
- *	@ring_size: total number of buffers (should be a power of 2)
- *	@nr_accounted: The amount this pipe accounts for in user->pipe_bufs
- *	@tmp_page: cached released page
+ *	@ring_size: total number of buffers (4KB)
  *	@readers: number of current readers of this pipe
  *	@writers: number of current writers of this pipe
  *	@files: number of struct file referring this pipe (protected by ->i_lock)
  *	@r_counter: reader counter
  *	@w_counter: writer counter
- *	@poll_usage: is this pipe used for epoll, which has crazy wakeups?
- *	@fasync_readers: reader side fasync
- *	@fasync_writers: writer side fasync
  *	@bufs: the circular array of pipe buffers
  *	@user: the user who created this pipe
- *	@watch_queue: If this pipe is a watch_queue, this is the stuff for that
  **/
 struct pipe_inode_info {
 	struct spinlock mutex;
@@ -187,31 +181,16 @@ struct pipe_inode_info {
 	unsigned int tail;
 	unsigned int max_usage;
 	unsigned int ring_size;
-#ifdef CONFIG_WATCH_QUEUE
-	bool note_loss;
-#endif
-	// unsigned int nr_accounted;
 	unsigned int readers;
 	unsigned int writers;
-	// use inode->cnt instead. files is repeated.
-    // unsigned int files; 
 	unsigned int r_counter;
 	unsigned int w_counter;
-	// bool poll_usage;
-	// struct page *tmp_page;
-	// struct fasync_struct *fasync_readers;
-	// struct fasync_struct *fasync_writers;
 	char *bufs;
 	PROCESS *user;
-#ifdef CONFIG_WATCH_QUEUE
-	struct watch_queue *watch_queue;
-#endif
 };
 ```
 
-
-
-
+### 管道通信 - 互斥与同步
 
 为了协调双方的通信，管道通信机制必须提供以下3 方面的协调能力。
 
@@ -219,13 +198,51 @@ struct pipe_inode_info {
 - 同步。当写（输入）进程把一定数量（如4KB）数据写入 pipe 后，便去睡眠等待，直到读（输出）进程取走数据后，再把它唤醒。当读进程读到一空 pipe 时，也应睡眠等待，直至写进程将数据写入管道后，才将它唤醒。
 - 对方是否存在。只有确定对方已存在时，才能进行通信。
 
+#### 自旋锁
+
+自旋锁是一个简单的互斥锁，保证了对一个管道inode资源访问的互斥。
+
+每当一个进程需要读写管道时，通过`acquire(struct spinlock *lock)`和`void release(struct spinlock *lock)`管理对管道资源的访问。
+
+```c
+int pipe_read(int fd, void *buf, int count) {
+	
+    check_fd_and_preparation_code();
+    
+    acquire(&(pipe_info->mutex));
+    
+    do_pipe_read_code();
+
+    release(&pipe_info->mutex);
+
+}
+```
+
+#### 读写调度
+
+
+
+
+
+
+
+
+
+#### 等待队列
+
+
+
+### 系统调用 - 管道文件读写接口
+
 首先我们有对应的调用函数，作为pipe对外的接口：
 
 ```c
 int sys_pipe(void *uesp);
+int sys_mkfifo(void *uesp);
 int pipe_read(int fd, void *buf, int count);
 int pipe_write(int fd, const void *buf, int count);
-int pipe_release(int fd);
+int pipe_close(int fd);
+int pipe_info_release(struct pipe_inode_info *pipe_info);
 ```
 
 在miniOS中，read的调用链是`read->do_vread->read_op`.
