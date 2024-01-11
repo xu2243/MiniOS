@@ -1,5 +1,3 @@
-# pipe 和 dup 两类系统调用在miniOS中的实现与测试
-
 ## 要求
 
  实现管道系统： 
@@ -12,182 +10,7 @@
   - 特殊情况处理，例如进程退出而没有关闭管道，多组进程同时使用管道系统 
   - 其他的功能，例如基于管道实现进程间同步等
 
-## pipe syscall
-
-A pipe is a mechanism in Unix-like operating systems, including Linux, that allows the flow of data between two processes. It enables one process to communicate with another without having to share memory or other resources. A pipe can be created using the pipe system call (pipe) and consists of a read end and a write end.
-
-## Syntax:
-
-```c
-int pipe(int pipefd[2]);
-```
-
-**Parameters:**
-
-- `pipefd[0]`: File descriptor of the pipe's read end
-- `pipefd[1]`: File descriptor of the pipe's write end
-
-## Return Value:
-
-- If successful, it returns 0 and the file descriptors are valid for reading from the read end and writing to the write end.
-- Otherwise, it returns an error code (typically -1), indicating an error occurred.
-
-## Usage:
-
-To use a pipe in your program, you'll need to perform the following steps:
-
-1. Create the pipe using the `pipe` system call. This creates two file descriptors, one for reading from the pipe and another for writing to the pipe. 
-
-   ```c
-   int pipefd[2];
-   pipe(pipefd);
-   if(pipe(pipefd) != 0) {
-       perror("Failed to create a new pipe.");
-       return -1;
-   }
-   ```
-
-2. Create child process (or use existing one). The child process will read from the write end and write to the read end, while the parent process will read from the read end and write to the write end.
-
-3. Close the file descriptors for both ends of the pipe that you're not using, in order to prevent leaks.
-
-   ```c
-   close(pipefd[0]); // Close the read end descriptor
-   close(pipefd[1]); // Close the write end descriptor
-   ```
-   
-4. For reading from the write end or writing to the read end, open the file descriptors for that end of the pipe.
-
-## Examples:
-
-Here are two simple examples to demonstrate how to use a pipe in miniOS:
-
-### Creating a Pipe
-
-```c
-int pipefd[2];
-pipe(pipefd);
-if(pipe(pipefd) != 0) {
-    perror("Failed to create a new pipe.");
-    return -1;
-}
-close(pipefd[0]); // Close the read end descriptor
-close(pipefd[1]); // Close the write end descriptor
-```
-
-### Using pipe to communicate between processes
-
-```c
-char *buf[MAX_BUF];
-int pipefd[2];
-if (pipe(pipefd) == -1)
-{
-    printf("pipe failed ");
-    return;
-}
-int cpid = fork();
-
-if (cpid > 0)
-{
-    close(pipefd[0]);
-    if (dup2(pipefd[1], STD_OUT) == -1)
-        printf("dup2 failed\n");
-    printf("hello, my son!");
-}
-else if (cpid == 0)
-{
-    close(pipefd[1]);
-    if (dup2(pipefd[0], STD_IN) == -1)
-        printf("dup2 failed\n");
-    gets(buf);
-    printf("from father:%s", buf);
-}
-```
-
-what suppose to print in console are as follows:
-
-```
-from father:hello, my son!
-```
-
-## 实现细节
-
-### 系统分析
-
-首先我们有对应的调用函数，作为pipe对外的接口：
-
-```c
-int sys_pipe(void *uesp);
-int pipe_read(int fd, void *buf, int count);
-int pipe_write(int fd, const void *buf, int count);
-int pipe_release(int fd);
-```
-
-在miniOS中，read的调用链是`read->do_vread->read_op`.
-
-在这个调用链中，值得注意的是miniOS是根据vfs_table的dev对应的op操作来选择的。如果是orange系统，则选择orange系统的op；如果是fat32系统，则选择fat32系统的op。
-
-```c
-int do_vread(int fd, char *buf, int count) {
-    int index = p_proc_current->task.filp[fd]->dev_index;
-    return vfs_table[index].op->read(fd, buf, count);   //modified by mingxuan 2020-10-18
-}
-```
-
-file_op定义如下：
-
-```c
-struct file_op{
-    int (*create)   (const char*);
-	int (*open)    (const char* ,int);
-	int (*close)   (int);
-	int (*read)    (int,void * ,int);
-	int (*write)   (int ,const void* ,int);
-	int (*lseek)   (int ,int ,int);
-	int (*unlink)  (const char*);
-    int (*delete) (const char*);
-	int (*opendir) (const char *);
-	int (*createdir) (const char *);
-	int (*deletedir) (const char *);
-};
-```
-
-因此，在我们最初的设计中，我直接定义了一个新的vfs，以便文件的读写操作能直接对应到我们的pipe读写操作：
-
-```c
-// table[3] for pipefifo vfs
-f_op_table[3].create = fifo_create; 
-f_op_table[3].close = pipe_release;
-f_op_table[3].write = pipe_write;
-f_op_table[3].read = pipe_read;
-f_op_table[3].unlink = pipe_unlink;
-
-vfs_table[PIPEFIFO].fs_name = "pipefifo"; 
-vfs_table[PIPEFIFO].op = &f_op_table[3];
-```
-
-但是这在miniOS中并不是一个很融洽的设计，因为我们的fifo最后应该出现在orange的文件目录里，而orange也甚至还给我们的fifo关键字留了一个宏定义（这是一个仿照`linux-0.12`的宏定义设计）！
-
-```c
-/* fs_const.h */
-/* INODE::i_mode (octal, lower 32 bits reserved) */
-#define I_TYPE_MASK     0170000			// 文件类型掩码，用于提取文件类型部分的位
-#define I_REGULAR       0100000			// 常规文件的类型标志
-#define I_BLOCK_SPECIAL 0060000			// 块设备文件的类型标志
-#define I_DIRECTORY     0040000			// 目录的类型标志
-#define I_CHAR_SPECIAL  0020000			// 字符设备文件的类型标志
-#define I_NAMED_PIPE	0010000			// 命名管道（FIFO）的类型标志
-```
-
-也就是说，orange的文件系统用inode的i_mode字段把文件分为了：目录文件，常规文件，块设备文件，字符设备文件，fifo文件等。
-
-
-
-
-
-
-
-
+## 测试案例
 
 ### 单元测试
 
@@ -195,11 +18,11 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
 
    ```c
    void pipe_test(){
-    int pipefd[2];
-    if (pipe(pipefd) == -1){
-        printf("pipe failed ");
-        return ;
-    }
+   	int pipefd[2];
+   	if (pipe(pipefd) == -1){
+   		printf("pipe failed ");
+   		return ;
+   	}
    ```
     pipe的系统调用接口：
     `int pipe(int pipefd[2])`
@@ -208,19 +31,19 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
     ```c
        int cpid = fork();
    
-    if (cpid > 0) {
-        close(pipefd[0]);
-        write(pipefd[1], "hi son", 7);
-        exit(0);
-    }
-    else if (cpid == 0) {
-        char line[1024];
-        close(pipefd[1]);
-        printf("father says:");
+   	if (cpid > 0) {
+   		close(pipefd[0]);
+   		write(pipefd[1], "hi son", 7);
+   		exit(0);
+   	}
+   	else if (cpid == 0) {
+   		char line[1024];
+   		close(pipefd[1]);
+   		printf("father says:");
            read(pipefd[0], line, 1024);
            printf("%s", line);
            exit(0);
-    }
+   	}
    }
     ```
 
@@ -328,28 +151,28 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
    //minios的时钟中断处理
    void clock_handler(int irq)
    {
-    ticks++;
-    
-    /* There is two stages - in kernel intializing or in process running.
-     * Some operation shouldn't be valid in kernel intializing stage.
-     * added by xw, 18/6/1
-     */
-    if(kernel_initial == 1){
-        return;
-    }
-    irq = 0;
-    p_proc_current->task.ticks--;
-    sys_wakeup(&ticks);
+   	ticks++;
+   	
+   	/* There is two stages - in kernel intializing or in process running.
+   	 * Some operation shouldn't be valid in kernel intializing stage.
+   	 * added by xw, 18/6/1
+   	 */
+   	if(kernel_initial == 1){
+   		return;
+   	}
+   	irq = 0;
+   	p_proc_current->task.ticks--;
+   	sys_wakeup(&ticks);
    }
    void sys_wakeup(void *channel)
    {
-    PROCESS *p;
-    
-    for(p = proc_table; p < proc_table + NR_PCBS; p++){
-        if(p->task.stat == SLEEPING && p->task.channel == channel){
-            p->task.stat = READY;
-        }
-    }
+   	PROCESS *p;
+   	
+   	for(p = proc_table; p < proc_table + NR_PCBS; p++){
+   		if(p->task.stat == SLEEPING && p->task.channel == channel){
+   			p->task.stat = READY;
+   		}
+   	}
    }
    ```
 
@@ -445,3 +268,4 @@ vfs_table[PIPEFIFO].op = &f_op_table[3];
 ## P.S.
 
 如果在用户测试程序中不调用exit，那么多次执行用户程序后因为pcb未释放会导致fork失败。
+
