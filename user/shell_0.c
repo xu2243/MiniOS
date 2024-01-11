@@ -279,6 +279,33 @@ void fifo_test(){
   }
 }
 
+void pipe_test(){
+	int pipefd[2];
+	if (pipe(pipefd) == -1){
+		printf("pipe failed ");
+		return ;
+	}
+    int cpid = fork();
+
+	if (cpid > 0) {
+		printf("father, son:%d\n", cpid);
+		close(pipefd[0]);
+		write(pipefd[1], "hi son", 7);
+		exit(0);
+	}
+	else if (cpid == 0) {
+		char line[1024];
+		printf("son\n");
+		close(pipefd[1]);
+		printf("father says:");
+		for(;;){
+			read(pipefd[0], line, 1024);
+			printf("%s", line);
+			exit(0);
+		}
+	}
+}
+
 void run(char* line, int tn){
 	int cpid = fork();
 	if(cpid > 0){
@@ -304,6 +331,9 @@ void run(char* line, int tn){
 			break;
 		case 4:
 			fifo_test();
+			break;
+		case 5:
+			pipe_test();
 			break;
 		}
 	}
@@ -336,6 +366,8 @@ int main(int arg, char *argv[])
               run("a | b | c", 3);
             else if (strncmp("fifo", buf, 4) == 0) 
               run("fifo test", 4);
+			else if (strncmp("pipe", buf, 4) == 0)
+				run("pipe test", 5);
             else
               run(buf, 0);
         }
