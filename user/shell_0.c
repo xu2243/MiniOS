@@ -334,7 +334,7 @@ void pipe_test(){
 		printf("son\n");
 		close(pipefd[1]);
 		printf("father says:");
-		read(pipefd[0], line, 1024);
+		read(pipefd[0], line, 7);
 		printf("%s\n", line);
 		exit(0);
 	}

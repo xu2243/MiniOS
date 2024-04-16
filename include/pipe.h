@@ -3,12 +3,12 @@
 #include "list.h"
 #include "spinlock.h"
 
-#define PIPE_BUF_PAGE_NUM   1
 #define KB (unsigned)(1024)
 #define MB (KB*KB)
 #define PAGE_SIZE (4 * KB)
-#define READ_MODE   0x1
-#define WRITE_MODE  0x2
+#define PIPE_BUF_SIZE PAGE_SIZE
+#define MAX_PIPE_INODE 512
+#define PIPE_LOCK "pipe_lock"
 
 struct list_head;
 struct spinlock;

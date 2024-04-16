@@ -13,6 +13,9 @@
 #include "stdio.h"
 
 static int do_dup2(int oldfd, int newfd) {
+    if (oldfd == newfd) {
+		return newfd;
+    }
     if (p_proc_current->task.filp[newfd]->flag == 1) {
         if (do_vclose(newfd) == -1) {
             kprintf("close error");
@@ -20,7 +23,7 @@ static int do_dup2(int oldfd, int newfd) {
         }
     }
     p_proc_current->task.filp[newfd] = p_proc_current->task.filp[oldfd];
-    return 0;
+    return newfd;
 }
 
 int sys_dup2(void* uesp) {
